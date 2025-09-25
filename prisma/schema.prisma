@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  firstName   String
+  lastName    String
+  department  String
+  role        UserRole @default(ADMIN)
+  password    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ipAssignments IPAssignment[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+}
+
+// IP Address Management
+model IPAddress {
+  id          String      @id @default(cuid())
+  address     String      @unique // e.g., "192.168.1.100"
+  status      IPStatus    @default(AVAILABLE)
+  subnet      String      // e.g., "192.168.1.0/24"
+  gateway     String?     // e.g., "192.168.1.1"
+  dns         String?     // e.g., "8.8.8.8"
+  isReserved  Boolean     @default(false)
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  assignments IPAssignment[]
+  auditLogs   AuditLog[]
+
+  @@map("ip_addresses")
+}
+
+enum IPStatus {
+  AVAILABLE
+  ASSIGNED
+  RESERVED
+  OFFLINE
+}
+
+// Equipment Management
+model Equipment {
+  id          String   @id @default(cuid())
+  name        String
+  type        EquipmentType
+  macAddress  String?  @unique
+  serialNumber String?
+  location    String?
+  description String?
+  status      EquipmentStatus @default(ONLINE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ipAssignments IPAssignment[]
+  auditLogs     AuditLog[]
+
+  @@map("equipment")
+}
+
+enum EquipmentType {
+  COMPUTER
+  SERVER
+  PRINTER
+  ROUTER
+  SWITCH
+  FIREWALL
+  OTHER
+}
+
+enum EquipmentStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  UNKNOWN
+}
+
+// IP Assignment Tracking
+model IPAssignment {
+  id          String   @id @default(cuid())
+  ipAddressId String
+  equipmentId String?
+  userId      String
+  assignedAt  DateTime @default(now())
+  releasedAt  DateTime?
+  isActive    Boolean  @default(true)
+  notes       String?
+
+  // Relations
+  ipAddress IPAddress @relation(fields: [ipAddressId], references: [id])
+  equipment Equipment? @relation(fields: [equipmentId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@map("ip_assignments")
+}
+
+// Audit Logging
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String   // e.g., "IP_ASSIGNED", "EQUIPMENT_ADDED", "USER_LOGIN"
+  entityType  String   // e.g., "IP_ADDRESS", "EQUIPMENT", "USER"
+  entityId    String
+  userId      String
+  ipAddressId String?
+  equipmentId String?
+  details     Json?    // Additional details as JSON
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user      User       @relation(fields: [userId], references: [id])
+  ipAddress IPAddress? @relation(fields: [ipAddressId], references: [id])
+  equipment Equipment? @relation(fields: [equipmentId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Network Configuration
+model NetworkConfig {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subnet      String   // e.g., "192.168.1.0/24"
+  gateway     String   // e.g., "192.168.1.1"
+  dnsPrimary  String?  // e.g., "8.8.8.8"
+  dnsSecondary String? // e.g., "8.8.4.4"
+  dhcpEnabled Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("network_configs")
+}
