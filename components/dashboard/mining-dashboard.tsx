@@ -55,7 +55,7 @@ const equipmentData = [
     location: "Pit B - Level 2",
     lastSeen: "1 minute ago",
     meshStrength: 92,
-    nodeId: "RAJ-002",
+    nodeId: "Maj-002",
   },
   {
     id: "EQ003",
