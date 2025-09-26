@@ -28,6 +28,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { IPChecker } from "@/components/ip/ip-checker";
+import { QuickActions } from "@/components/dashboard/quick-actions";
+import { AssignmentDialog, AssignmentFormData } from "@/components/ip/assignment-dialog";
+import { ReservationDialog, ReservationFormData } from "@/components/ip/reservation-dialog";
 
 // Mock data for demonstration
 const equipmentData = [
@@ -112,6 +116,9 @@ const alerts = [
 
 export function MiningDashboard() {
   const [selectedTab, setSelectedTab] = useState("overview");
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [isReserveDialogOpen, setIsReserveDialogOpen] = useState(false);
+  const [currentIP, setCurrentIP] = useState("");
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -152,6 +159,41 @@ export function MiningDashboard() {
     }
   };
 
+  const handleAssignIP = (ip: string) => {
+    setCurrentIP(ip);
+    setIsAssignDialogOpen(true);
+  };
+
+  const handleReserveIP = (ip: string) => {
+    setCurrentIP(ip);
+    setIsReserveDialogOpen(true);
+  };
+
+  const handleViewDetails = (ip: string) => {
+    console.log("Viewing details for IP:", ip);
+    // Navigate to detailed view
+  };
+
+  const handleUnassign = (ip: string) => {
+    console.log("Unassigning IP:", ip);
+    // Handle unassignment
+  };
+
+  const handleRefresh = (ip: string) => {
+    console.log("Refreshing status for IP:", ip);
+    // Handle refresh
+  };
+
+  const handleConfirmAssignment = (data: AssignmentFormData) => {
+    console.log("Assigning IP:", currentIP, "to equipment:", data);
+    setIsAssignDialogOpen(false);
+  };
+
+  const handleConfirmReservation = (data: ReservationFormData) => {
+    console.log("Reserving IP:", currentIP, "for reason:", data);
+    setIsReserveDialogOpen(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -169,6 +211,15 @@ export function MiningDashboard() {
           </Badge>
         </div>
       </div>
+
+      {/* IP Address Checker Section */}
+      <IPChecker
+        onAssignIP={handleAssignIP}
+        onReserveIP={handleReserveIP}
+        onViewDetails={handleViewDetails}
+        onUnassign={handleUnassign}
+        onRefresh={handleRefresh}
+      />
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -433,6 +484,25 @@ export function MiningDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Quick Actions Section */}
+      <QuickActions />
+
+      {/* Assignment Dialog */}
+      <AssignmentDialog
+        isOpen={isAssignDialogOpen}
+        onClose={() => setIsAssignDialogOpen(false)}
+        ipAddress={currentIP}
+        onConfirm={handleConfirmAssignment}
+      />
+
+      {/* Reservation Dialog */}
+      <ReservationDialog
+        isOpen={isReserveDialogOpen}
+        onClose={() => setIsReserveDialogOpen(false)}
+        ipAddress={currentIP}
+        onConfirm={handleConfirmReservation}
+      />
     </div>
   );
 }

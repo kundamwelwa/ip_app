@@ -78,20 +78,21 @@ const navigation = [
     title: "IP Management",
     items: [
       {
-        title: "IP Address Pool",
-        href: "/ip-pool",
+        title: "IP Management",
+        href: "/ip-management",
         icon: Monitor,
       },
       {
-        title: "Assignments",
-        href: "/assignments",
+        title: "IP Assignment",
+        href: "/ip-assignment",
         icon: MapPin,
       },
       {
-        title: "Reserved IPs",
-        href: "/reserved",
-        icon: Shield,
+        title: "IP Monitoring",
+        href: "/ip-monitoring",
+        icon: Activity,
       },
+      
     ],
   },
   {
