@@ -52,7 +52,7 @@ export function Header() {
             </div>
             <div className="flex flex-col">
               <h1 className="text-lg font-bold tracking-tight">
-                Rajant Mesh Network
+                First Quantum Mine [FQM]
               </h1>
               <p className="text-xs text-muted-foreground">
                 IP Address Management System
@@ -69,9 +69,9 @@ export function Header() {
           {/* User Profile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-auto px-3">
+              <Button variant="ghost" className="relative h-12 w-auto px-3">
                 <div className="flex items-center space-x-3">
-                  <Avatar className="h-8 w-8">
+                  <Avatar className="h-10 w-10">
                     <AvatarImage src="" alt={session.user?.name || ""} />
                     <AvatarFallback className="text-xs">
                       {getInitials(session.user?.name || "U")}

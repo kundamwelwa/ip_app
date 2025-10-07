@@ -235,7 +235,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       </header>
 
       {/* Navigation */}
-      <div className="flex-1 px-3 py-4">
+      <div className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500">
         <nav className="space-y-1">
           {navigation.map((section, sectionIndex) => (
             <div key={section.title}>

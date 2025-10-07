@@ -129,8 +129,8 @@ export function ReservationDialog({ isOpen, onClose, ipAddress, onConfirm }: Res
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center space-x-2">
             <Shield className="h-5 w-5 text-primary" />
             <span>Reserve IP Address</span>
@@ -140,111 +140,138 @@ export function ReservationDialog({ isOpen, onClose, ipAddress, onConfirm }: Res
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-6 pr-2">
           {/* Reservation Details */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="reserve-reason">Reason for Reservation *</Label>
-              <Select
-                value={formData.reason}
-                onValueChange={(value) => handleFieldChange("reason", value)}
-              >
-                <SelectTrigger className={errors.reason ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select reason" />
-                </SelectTrigger>
-                <SelectContent>
-                  {reservationReasons.map((reason) => (
-                    <SelectItem key={reason.value} value={reason.value}>
-                      {reason.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.reason && (
-                <p className="text-sm text-red-500 mt-1">{errors.reason}</p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="reserve-by">Reserved By *</Label>
-              <Input
-                id="reserve-by"
-                value={formData.reservedBy}
-                onChange={(e) => handleFieldChange("reservedBy", e.target.value)}
-                placeholder="Your name"
-                className={errors.reservedBy ? "border-red-500" : ""}
-              />
-              {errors.reservedBy && (
-                <p className="text-sm text-red-500 mt-1">{errors.reservedBy}</p>
-              )}
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="reserve-duration">Reservation Duration</Label>
-              <Select
-                value={formData.duration}
-                onValueChange={(value) => handleFieldChange("duration", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select duration" />
-                </SelectTrigger>
-                <SelectContent>
-                  {durationOptions.map((duration) => (
-                    <SelectItem key={duration.value} value={duration.value}>
-                      {duration.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <div className="text-sm text-muted-foreground">
-                <Clock className="h-4 w-4 inline mr-1" />
-                Auto-expires after selected duration
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-foreground">Reservation Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="reserve-reason" className="text-sm font-medium text-foreground">
+                  Reason for Reservation *
+                </Label>
+                <Select
+                  value={formData.reason}
+                  onValueChange={(value) => handleFieldChange("reason", value)}
+                >
+                  <SelectTrigger className={`h-10 ${errors.reason ? "border-red-500 focus:border-red-500" : ""}`}>
+                    <SelectValue placeholder="Select reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {reservationReasons.map((reason) => (
+                      <SelectItem key={reason.value} value={reason.value}>
+                        {reason.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.reason && (
+                  <p className="text-sm text-red-500 mt-1 flex items-center">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {errors.reason}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reserve-by" className="text-sm font-medium text-foreground">
+                  Reserved By *
+                </Label>
+                <Input
+                  id="reserve-by"
+                  value={formData.reservedBy}
+                  onChange={(e) => handleFieldChange("reservedBy", e.target.value)}
+                  placeholder="Your name"
+                  className={`h-10 ${errors.reservedBy ? "border-red-500 focus:border-red-500" : ""}`}
+                />
+                {errors.reservedBy && (
+                  <p className="text-sm text-red-500 mt-1 flex items-center">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {errors.reservedBy}
+                  </p>
+                )}
               </div>
             </div>
           </div>
           
-          <div>
-            <Label htmlFor="reserve-notes">Notes</Label>
-            <Textarea
-              id="reserve-notes"
-              value={formData.notes}
-              onChange={(e) => handleFieldChange("notes", e.target.value)}
-              placeholder="Additional notes about this reservation"
-              rows={3}
-            />
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-foreground">Duration & Notes</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="reserve-duration" className="text-sm font-medium text-foreground">
+                  Reservation Duration
+                </Label>
+                <Select
+                  value={formData.duration}
+                  onValueChange={(value) => handleFieldChange("duration", value)}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {durationOptions.map((duration) => (
+                      <SelectItem key={duration.value} value={duration.value}>
+                        {duration.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground flex items-center">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Auto-expires after selected duration
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reserve-notes" className="text-sm font-medium text-foreground">
+                  Notes
+                </Label>
+                <Textarea
+                  id="reserve-notes"
+                  value={formData.notes}
+                  onChange={(e) => handleFieldChange("notes", e.target.value)}
+                  placeholder="Additional notes about this reservation..."
+                  rows={4}
+                  className="resize-none"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: Add any additional information about this reservation
+                </p>
+              </div>
+            </div>
           </div>
           
           {/* Reservation Summary */}
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-medium mb-2 flex items-center space-x-2">
-              <Calendar className="h-4 w-4" />
-              <span>Reservation Summary</span>
+          <div className="p-6 bg-muted/30 border border-border rounded-lg">
+            <h4 className="font-semibold text-foreground mb-4 flex items-center">
+              <Calendar className="h-4 w-4 mr-2 text-primary" />
+              Reservation Summary
             </h4>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">IP Address:</span>
-                <span className="font-medium">{ipAddress}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">IP Address:</span>
+                  <span className="font-semibold text-foreground bg-primary/10 px-2 py-1 rounded">
+                    {ipAddress}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Reason:</span>
+                  <span className="font-medium text-foreground">
+                    {getReasonLabel(formData.reason) || "Not specified"}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reason:</span>
-                <span className="font-medium">
-                  {getReasonLabel(formData.reason) || "Not specified"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reserved By:</span>
-                <span className="font-medium">
-                  {formData.reservedBy || "Not specified"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Duration:</span>
-                <span className="font-medium">
-                  {getDurationLabel(formData.duration || "1_day")}
-                </span>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Reserved By:</span>
+                  <span className="font-medium text-foreground">
+                    {formData.reservedBy || "Not specified"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Duration:</span>
+                  <span className="font-medium text-foreground">
+                    {getDurationLabel(formData.duration || "1_day")}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -260,7 +287,7 @@ export function ReservationDialog({ isOpen, onClose, ipAddress, onConfirm }: Res
           </div>
         </div>
         
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 border-t pt-4">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             <X className="h-4 w-4 mr-2" />
             Cancel

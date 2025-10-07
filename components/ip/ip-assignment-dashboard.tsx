@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -116,8 +116,46 @@ export function IPAssignmentDashboard() {
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
   const [selectedIP, setSelectedIP] = useState<IPAddress | null>(null);
 
-  // Mock data - In a real application, this would come from API calls
-  const [equipment, setEquipment] = useState<Equipment[]>([
+  // Equipment data from API
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch equipment data from API
+  useEffect(() => {
+    fetchEquipmentData();
+  }, []);
+
+  const fetchEquipmentData = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch("/api/equipment");
+      if (!response.ok) {
+        throw new Error("Failed to fetch equipment");
+      }
+      const data = await response.json();
+      
+      // Transform API data to match our interface
+      const transformedEquipment = data.equipment.map((eq: any) => ({
+        id: eq.id,
+        name: eq.name,
+        type: eq.type,
+        model: eq.model || "",
+        manufacturer: eq.manufacturer || "",
+        serialNumber: eq.serialNumber || "",
+        status: eq.status.toLowerCase(),
+        location: eq.location || "",
+        operator: eq.operator || "", // This should preserve the original operator
+        lastSeen: new Date(eq.lastSeen || eq.updatedAt),
+        ipAddress: eq.ipAssignments?.[0]?.ipAddress?.address,
+        macAddress: eq.macAddress,
+        notes: eq.notes
+      }));
+      
+      setEquipment(transformedEquipment);
+    } catch (error) {
+      console.error("Error fetching equipment:", error);
+      // Fallback to mock data if API fails
+      setEquipment([
     {
       id: "EQ001",
       name: "Mining Truck 001",
@@ -174,7 +212,11 @@ export function IPAssignmentDashboard() {
       lastSeen: new Date("2024-01-18"),
       notes: "Scheduled maintenance",
     },
-  ]);
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const [ipAddresses, setIPAddresses] = useState<IPAddress[]>([
     {
@@ -385,18 +427,18 @@ export function IPAssignmentDashboard() {
     setSelectedIP(null);
   };
 
-  const handleUnassignIP = (equipment: Equipment) => {
-    if (confirm(`Are you sure you want to unassign IP address from ${equipment.name}?`)) {
+  const handleUnassignIP = (equipmentItem: Equipment) => {
+    if (confirm(`Are you sure you want to unassign IP address from ${equipmentItem.name}?`)) {
       // Update equipment to remove IP address
       const updatedEquipment = equipment.map(eq => 
-        eq.id === equipment.id 
+        eq.id === equipmentItem.id 
           ? { ...eq, ipAddress: undefined, macAddress: undefined }
           : eq
       );
 
       // Update IP address status
       const updatedIPs = ipAddresses.map(ip => 
-        ip.assignedTo === equipment.name 
+        ip.assignedTo === equipmentItem.name 
           ? { 
               ...ip, 
               status: "available" as const,
@@ -467,6 +509,19 @@ export function IPAssignmentDashboard() {
       notes: "",
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading equipment data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -19,6 +19,15 @@ import {
   RefreshCw,
   Download,
   Upload,
+  Wifi,
+  WifiOff,
+  Zap,
+  Timer,
+  Signal,
+  Network,
+  Eye,
+  Link,
+  Unlink,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,51 +61,40 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ImportExportDialog } from "./import-export-dialog";
+import { MiningEquipment, EquipmentFormData } from "@/types/equipment";
+import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
+import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
+import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 
-// Types for equipment data
-interface MiningEquipment {
-  id: string;
-  name: string;
-  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor";
-  model: string;
-  manufacturer: string;
-  serialNumber: string;
-  ipAddress: string;
-  macAddress: string;
-  status: "online" | "offline" | "maintenance" | "idle";
-  location: string;
-  operator: string;
-  lastMaintenance: Date;
-  nextMaintenance: Date;
-  operatingHours: number;
-  fuelLevel: number;
-  notes: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface EquipmentFormData {
-  name: string;
-  type: string;
-  model: string;
-  manufacturer: string;
-  serialNumber: string;
-  ipAddress: string;
-  macAddress: string;
-  location: string;
-  operator: string;
-  notes: string;
-}
+// Equipment types and form data are now imported from types/equipment.ts
 
 export function MiningEquipmentDashboard() {
   const [equipment, setEquipment] = useState<MiningEquipment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<MiningEquipment | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Real-time monitoring
+  const {
+    equipmentStatuses,
+    monitoringStatus,
+    isLoading: isMonitoringLoading,
+    error: monitoringError,
+    checkAllEquipment,
+    checkEquipment,
+    startMonitoring,
+    stopMonitoring,
+    getOnlineCount,
+    getOfflineCount,
+  } = useEquipmentMonitoring();
   const [formData, setFormData] = useState<EquipmentFormData>({
     name: "",
     type: "",
@@ -108,6 +106,7 @@ export function MiningEquipmentDashboard() {
     location: "",
     operator: "",
     notes: "",
+    status: "ONLINE",
   });
 
   // Equipment types for dropdown
@@ -120,133 +119,48 @@ export function MiningEquipmentDashboard() {
     "Caterpillar", "Komatsu", "Liebherr", "Hitachi", "Volvo", "John Deere", "Case", "JCB"
   ];
 
-  // Simulate real-time data fetching
-  useEffect(() => {
-    const fetchEquipmentData = async () => {
+  // Fetch real equipment data from API
+  const fetchEquipmentData = async (useRealTime = false) => {
       setIsLoading(true);
       try {
-        // In a real application, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Generate realistic equipment data
-        const equipmentData: MiningEquipment[] = [
-          {
-            id: "EQ001",
-            name: "Haul Truck CAT 797F",
-            type: "Truck",
-            model: "797F",
-            manufacturer: "Caterpillar",
-            serialNumber: "CAT797F-001",
-            ipAddress: "192.168.1.100",
-            macAddress: "00:1B:44:11:3A:B7",
-            status: "online",
-            location: "Pit A - Level 3",
-            operator: "John Smith",
-            lastMaintenance: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            nextMaintenance: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000),
-            operatingHours: 2847,
-            fuelLevel: 85,
-            notes: "Regular operation, no issues reported",
-            createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
-            updatedAt: new Date(),
-          },
-          {
-            id: "EQ002",
-            name: "Excavator CAT 6020B",
-            type: "Excavator",
-            model: "6020B",
-            manufacturer: "Caterpillar",
-            serialNumber: "CAT6020B-002",
-            ipAddress: "192.168.1.101",
-            macAddress: "00:1B:44:11:3A:B8",
-            status: "online",
-            location: "Pit A - Level 2",
-            operator: "Sarah Johnson",
-            lastMaintenance: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-            nextMaintenance: new Date(Date.now() + 16 * 24 * 60 * 60 * 1000),
-            operatingHours: 1923,
-            fuelLevel: 72,
-            notes: "High performance, excellent condition",
-            createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000),
-            updatedAt: new Date(),
-          },
-          {
-            id: "EQ003",
-            name: "Drill CAT MD6640",
-            type: "Drill",
-            model: "MD6640",
-            manufacturer: "Caterpillar",
-            serialNumber: "CATMD6640-003",
-            ipAddress: "192.168.1.102",
-            macAddress: "00:1B:44:11:3A:B9",
-            status: "offline",
-            location: "Pit B - Level 1",
-            operator: "Mike Wilson",
-            lastMaintenance: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-            nextMaintenance: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-            operatingHours: 3456,
-            fuelLevel: 0,
-            notes: "Requires immediate maintenance - hydraulic issue",
-            createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
-            updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-          },
-          {
-            id: "EQ004",
-            name: "Loader CAT 994K",
-            type: "Loader",
-            model: "994K",
-            manufacturer: "Caterpillar",
-            serialNumber: "CAT994K-004",
-            ipAddress: "192.168.1.103",
-            macAddress: "00:1B:44:11:3A:BA",
-            status: "maintenance",
-            location: "Maintenance Bay",
-            operator: "David Brown",
-            lastMaintenance: new Date(),
-            nextMaintenance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            operatingHours: 4123,
-            fuelLevel: 45,
-            notes: "Scheduled maintenance - engine overhaul",
-            createdAt: new Date(Date.now() - 200 * 24 * 60 * 60 * 1000),
-            updatedAt: new Date(),
-          },
-          {
-            id: "EQ005",
-            name: "Dozer CAT D11T",
-            type: "Dozer",
-            model: "D11T",
-            manufacturer: "Caterpillar",
-            serialNumber: "CATD11T-005",
-            ipAddress: "192.168.1.104",
-            macAddress: "00:1B:44:11:3A:BB",
-            status: "idle",
-            location: "Pit C - Level 4",
-            operator: "Lisa Davis",
-            lastMaintenance: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000),
-            nextMaintenance: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000),
-            operatingHours: 5678,
-            fuelLevel: 90,
-            notes: "Standby mode - waiting for next shift",
-            createdAt: new Date(Date.now() - 250 * 24 * 60 * 60 * 1000),
-            updatedAt: new Date(Date.now() - 30 * 60 * 1000),
-          },
-        ];
-
-        setEquipment(equipmentData);
+        setError(null);
+      const url = useRealTime ? "/api/equipment?realTime=true" : "/api/equipment";
+      const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("Failed to fetch equipment data");
+        }
+        const data = await response.json();
+        // Handle both direct array and paginated response
+        setEquipment(data.equipment || data || []);
       } catch (error) {
         console.error("Failed to fetch equipment data:", error);
+        setError(error instanceof Error ? error.message : "An error occurred");
       } finally {
         setIsLoading(false);
       }
     };
 
+  useEffect(() => {
     fetchEquipmentData();
     
     // Set up real-time updates every 60 seconds
-    const interval = setInterval(fetchEquipmentData, 60000);
+    const interval = setInterval(() => fetchEquipmentData(true), 60000);
     
     return () => clearInterval(interval);
   }, []);
+
+  // Handle real-time refresh
+  const handleRefreshAll = async () => {
+    setIsRefreshing(true);
+    try {
+      await checkAllEquipment();
+      await fetchEquipmentData(true);
+    } catch (error) {
+      console.error("Failed to refresh equipment data:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -278,42 +192,100 @@ export function MiningEquipmentDashboard() {
     }
   };
 
-  const filteredEquipment = equipment.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.operator.toLowerCase().includes(searchTerm.toLowerCase());
+  // Get real-time status for equipment
+  const getRealTimeStatus = (equipmentId: string) => {
+    return equipmentStatuses.find(status => status.equipmentId === equipmentId);
+  };
+
+  // Get accurate online count combining database and real-time data
+  const getAccurateOnlineCount = () => {
+    if (!equipment) return 0;
+    
+    return equipment.filter(item => {
+      const realTimeStatus = getRealTimeStatus(item.id);
+      if (realTimeStatus) {
+        return realTimeStatus.isOnline;
+      }
+      // Fallback to database status if no real-time data
+      return item.status === "ONLINE";
+    }).length;
+  };
+
+  // Get accurate offline count combining database and real-time data
+  const getAccurateOfflineCount = () => {
+    if (!equipment) return 0;
+    
+    return equipment.filter(item => {
+      const realTimeStatus = getRealTimeStatus(item.id);
+      if (realTimeStatus) {
+        return !realTimeStatus.isOnline;
+      }
+      // Fallback to database status if no real-time data
+      return item.status === "OFFLINE";
+    }).length;
+  };
+
+  // Get IP assignment for equipment
+  const getIPAssignment = (equipmentId: string) => {
+    const equipmentItem = equipment.find(eq => eq.id === equipmentId);
+    return equipmentItem?.ipAssignments?.[0]?.ipAddress?.address || "Not assigned";
+  };
+
+  // Handle IP assignment
+  const handleAssignIP = async (equipmentId: string) => {
+    // This would open an IP assignment dialog
+    console.log("Assign IP for equipment:", equipmentId);
+  };
+
+  // Handle IP unassignment
+  const handleUnassignIP = async (equipmentId: string) => {
+    // This would unassign IP from equipment
+    console.log("Unassign IP for equipment:", equipmentId);
+  };
+
+  const filteredEquipment = (equipment || []).filter(item => {
+    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         item.operator?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === "all" || item.type === filterType;
     const matchesStatus = filterStatus === "all" || item.status === filterStatus;
     
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const handleAddEquipment = () => {
-    // In a real application, this would make an API call
-    const newEquipment: MiningEquipment = {
-      id: `EQ${String(equipment.length + 1).padStart(3, '0')}`,
-      name: formData.name,
-      type: formData.type as "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor",
-      model: formData.model,
-      manufacturer: formData.manufacturer,
-      serialNumber: formData.serialNumber,
-      ipAddress: formData.ipAddress,
-      macAddress: formData.macAddress,
-      status: "online",
-      location: formData.location,
-      operator: formData.operator,
-      lastMaintenance: new Date(),
-      nextMaintenance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      operatingHours: 0,
-      fuelLevel: 100,
-      notes: formData.notes,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  const handleAddEquipment = async () => {
+    try {
+      const response = await fetch("/api/equipment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          type: formData.type,
+          model: formData.model,
+          manufacturer: formData.manufacturer,
+          serialNumber: formData.serialNumber,
+          macAddress: formData.macAddress || null,
+          location: formData.location,
+          operator: formData.operator,
+          notes: formData.notes,
+          status: formData.status,
+        }),
+      });
 
-    setEquipment([...equipment, newEquipment]);
-    setIsAddDialogOpen(false);
-    resetForm();
+      if (!response.ok) {
+        throw new Error("Failed to add equipment");
+      }
+
+      const newEquipment = await response.json();
+      setEquipment([...(equipment || []), newEquipment]);
+      setIsAddDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to add equipment:", error);
+      alert("Failed to add equipment. Please try again.");
+    }
   };
 
   const handleEditEquipment = (item: MiningEquipment) => {
@@ -321,42 +293,80 @@ export function MiningEquipmentDashboard() {
     setFormData({
       name: item.name,
       type: item.type,
-      model: item.model,
-      manufacturer: item.manufacturer,
-      serialNumber: item.serialNumber,
+      model: item.model || "",
+      manufacturer: item.manufacturer || "",
+      serialNumber: item.serialNumber || "",
       ipAddress: item.ipAddress,
-      macAddress: item.macAddress,
-      location: item.location,
-      operator: item.operator,
-      notes: item.notes,
+      macAddress: item.macAddress || "",
+      location: item.location || "",
+      operator: item.operator || "",
+      notes: item.notes || "",
+      status: item.status,
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateEquipment = () => {
+  const handleUpdateEquipment = async () => {
     if (!editingEquipment) return;
 
-    const updatedEquipment = equipment.map(item => 
-      item.id === editingEquipment.id 
-        ? { 
-            ...item, 
-            ...formData, 
-            type: formData.type as "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor",
-            updatedAt: new Date() 
-          }
-        : item
-    );
+    try {
+      const response = await fetch(`/api/equipment/${editingEquipment.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          type: formData.type,
+          model: formData.model,
+          manufacturer: formData.manufacturer,
+          serialNumber: formData.serialNumber,
+          macAddress: formData.macAddress || null,
+          location: formData.location,
+          operator: formData.operator,
+          notes: formData.notes,
+          status: formData.status,
+        }),
+      });
 
-    setEquipment(updatedEquipment);
-    setIsEditDialogOpen(false);
-    setEditingEquipment(null);
-    resetForm();
+      if (!response.ok) {
+        throw new Error("Failed to update equipment");
+      }
+
+      const updatedEquipment = await response.json();
+      setEquipment((equipment || []).map(item => 
+        item.id === editingEquipment.id ? updatedEquipment : item
+      ));
+      setIsEditDialogOpen(false);
+      setEditingEquipment(null);
+      resetForm();
+    } catch (error) {
+      console.error("Failed to update equipment:", error);
+      alert("Failed to update equipment. Please try again.");
+    }
   };
 
-  const handleDeleteEquipment = (id: string) => {
+  const handleDeleteEquipment = async (id: string) => {
     if (confirm("Are you sure you want to delete this equipment?")) {
-      setEquipment(equipment.filter(item => item.id !== id));
+      try {
+        const response = await fetch(`/api/equipment/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete equipment");
+        }
+
+        setEquipment((equipment || []).filter(item => item.id !== id));
+      } catch (error) {
+        console.error("Failed to delete equipment:", error);
+        alert("Failed to delete equipment. Please try again.");
+      }
     }
+  };
+
+  const handleImportEquipment = (newEquipment: MiningEquipment[]) => {
+    setEquipment([...(equipment || []), ...newEquipment]);
   };
 
   const resetForm = () => {
@@ -371,14 +381,17 @@ export function MiningEquipmentDashboard() {
       location: "",
       operator: "",
       notes: "",
+      status: "ONLINE",
     });
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | null | undefined) => {
+    if (!date) return "N/A";
     return date.toLocaleDateString();
   };
 
-  const formatOperatingHours = (hours: number) => {
+  const formatOperatingHours = (hours: number | null | undefined) => {
+    if (!hours) return "0 hrs";
     return `${hours.toLocaleString()} hrs`;
   };
 
@@ -403,37 +416,112 @@ export function MiningEquipmentDashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Mining Equipment</h1>
+            <p className="text-muted-foreground">
+              Manage and monitor all mining equipment
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
+              Error Loading Equipment Data
+            </h3>
+            <p className="text-red-700 dark:text-red-300 mb-4">{error}</p>
+            <Button 
+              onClick={() => window.location.reload()} 
+              variant="outline"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Mining Equipment</h1>
-          <p className="text-muted-foreground">
+      <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Mining Equipment</h1>
+          <p className="text-sm text-muted-foreground">
             Manage and monitor all mining equipment
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export
+        <div className="flex flex-wrap gap-2">
+          {/* Real-time monitoring controls */}
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleRefreshAll}
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </Button>
+            <Button 
+              variant={monitoringStatus.isRunning ? "destructive" : "default"}
+              size="sm"
+              onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring(30000)}
+            >
+              {monitoringStatus.isRunning ? (
+                <>
+                  <WifiOff className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Stop</span>
+                </>
+              ) : (
+                <>
+                  <Wifi className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Start</span>
+                </>
+              )}
+            </Button>
+          </div>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              console.log("Export button clicked");
+              setIsImportExportDialogOpen(true);
+            }}
+          >
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button variant="outline" size="sm">
-            <Upload className="h-4 w-4 mr-2" />
-            Import
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              console.log("Import button clicked");
+              setIsImportExportDialogOpen(true);
+            }}
+          >
+            <Upload className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Import</span>
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Equipment
+              <Button size="sm">
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Equipment</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Equipment</DialogTitle>
                 <DialogDescription>
-                  Add a new piece of mining equipment to the system.
+                  Add a new piece of mining equipment to the system. IP and MAC addresses can be assigned later.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -496,23 +584,23 @@ export function MiningEquipmentDashboard() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="ipAddress">IP Address</Label>
+                    <Label htmlFor="ipAddress">IP Address (Optional)</Label>
                     <Input
                       id="ipAddress"
                       value={formData.ipAddress}
                       onChange={(e) => setFormData({...formData, ipAddress: e.target.value})}
-                      placeholder="e.g., 192.168.1.100"
+                      placeholder="Will be assigned later if not provided"
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="macAddress">MAC Address</Label>
+                    <Label htmlFor="macAddress">MAC Address (Optional)</Label>
                     <Input
                       id="macAddress"
                       value={formData.macAddress}
                       onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
-                      placeholder="e.g., 00:1B:44:11:3A:B7"
+                      placeholder="Will be assigned later if not provided"
                     />
                   </div>
                   <div className="space-y-2">
@@ -559,61 +647,91 @@ export function MiningEquipmentDashboard() {
       </div>
 
       {/* Equipment Overview Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+        <Card className="flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Equipment</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Total Equipment</CardTitle>
+            <Truck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{equipment.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Active mining equipment
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold">{equipment?.length || 0}</div>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Active equipment
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Online</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Online</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {equipment.filter(e => e.status === "online").length}
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">
+              {getAccurateOnlineCount()}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Currently operational
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Operational
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
-            <Wrench className="h-4 w-4 text-yellow-600" />
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Offline</CardTitle>
+            <XCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {equipment.filter(e => e.status === "maintenance").length}
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold text-red-600">
+              {getAccurateOfflineCount()}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Under maintenance
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Attention needed
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Offline</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Maintenance</CardTitle>
+            <Wrench className="h-4 w-4 text-yellow-600 flex-shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {equipment.filter(e => e.status === "offline").length}
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold text-yellow-600">
+              {equipment?.filter(e => e.status === "MAINTENANCE").length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Requires attention
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Under service
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Monitoring</CardTitle>
+            <Activity className="h-4 w-4 text-blue-600 flex-shrink-0" />
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold text-blue-600">
+              {monitoringStatus.isRunning ? "ON" : "OFF"}
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Real-time
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Health</CardTitle>
+            <Network className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col justify-between">
+            <div className="text-xl sm:text-2xl font-bold text-indigo-600">
+              {equipment?.length > 0 ? Math.round((getAccurateOnlineCount() / equipment.length) * 100) : 0}%
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              Network uptime
             </p>
           </CardContent>
         </Card>
@@ -628,8 +746,8 @@ export function MiningEquipmentDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
+            <div className="flex-1 min-w-0">
               <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -640,9 +758,10 @@ export function MiningEquipmentDashboard() {
                 />
               </div>
             </div>
+            <div className="flex gap-2 sm:gap-3">
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Filter by type" />
+                <SelectTrigger className="w-[140px] sm:w-40">
+                  <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
@@ -652,8 +771,8 @@ export function MiningEquipmentDashboard() {
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Filter by status" />
+                <SelectTrigger className="w-[140px] sm:w-40">
+                  <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -663,24 +782,34 @@ export function MiningEquipmentDashboard() {
                 <SelectItem value="idle">Idle</SelectItem>
               </SelectContent>
             </Select>
+            </div>
           </div>
 
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Equipment</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>IP Address</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Operator</TableHead>
-                <TableHead>Operating Hours</TableHead>
-                <TableHead>Next Maintenance</TableHead>
-                <TableHead>Actions</TableHead>
+                  <TableHead className="min-w-[180px]">Equipment</TableHead>
+                  <TableHead className="min-w-[100px]">Type</TableHead>
+                  <TableHead className="min-w-[140px]">IP Address</TableHead>
+                  <TableHead className="min-w-[150px]">Real-time Status</TableHead>
+                  <TableHead className="min-w-[120px]">Response Time</TableHead>
+                  <TableHead className="min-w-[140px]">Signal Strength</TableHead>
+                  <TableHead className="min-w-[120px]">Location</TableHead>
+                  <TableHead className="min-w-[120px]">Operator</TableHead>
+                  <TableHead className="min-w-[140px]">Last Seen</TableHead>
+                  <TableHead className="min-w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEquipment.map((item) => (
+              {filteredEquipment.map((item) => {
+                const realTimeStatus = getRealTimeStatus(item.id);
+                const isOnline = realTimeStatus ? realTimeStatus.isOnline : item.status === "ONLINE";
+                const responseTime = realTimeStatus?.responseTime;
+                const lastSeen = realTimeStatus ? realTimeStatus.lastSeen : item.lastSeen;
+                const signalStrength = realTimeStatus ? Math.max(0, 100 - (responseTime || 0) / 10) : (item.meshStrength || 0);
+                
+                return (
                 <TableRow key={item.id}>
                   <TableCell>
                     <div className="flex items-center space-x-2">
@@ -694,50 +823,122 @@ export function MiningEquipmentDashboard() {
                   <TableCell>
                     <Badge variant="outline">{item.type}</Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{item.ipAddress}</TableCell>
                   <TableCell>
-                    <Badge className={getStatusColor(item.status)}>
-                      {getStatusIcon(item.status)}
-                      <span className="ml-1 capitalize">{item.status}</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-sm">{getIPAssignment(item.id)}</span>
+                        {getIPAssignment(item.id) !== "Not assigned" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUnassignIP(item.id)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Unlink className="h-3 w-3 text-red-500" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAssignIP(item.id)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Link className="h-3 w-3 text-green-500" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        <Badge className={isOnline ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}>
+                          {isOnline ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                          <span className="text-xs">{isOnline ? "ONLINE" : "OFFLINE"}</span>
                     </Badge>
+                        {realTimeStatus && (
+                          <div className="flex items-center space-x-1">
+                            <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                            <span className="text-xs text-muted-foreground">Live</span>
+                          </div>
+                        )}
+                      </div>
                   </TableCell>
                   <TableCell>
+                      {responseTime ? (
                     <div className="flex items-center space-x-1">
-                      <MapPin className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-sm">{item.location}</span>
+                          <Timer className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm font-mono">{responseTime}ms</span>
                     </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">N/A</span>
+                      )}
                   </TableCell>
-                  <TableCell className="text-sm">{item.operator}</TableCell>
-                  <TableCell className="text-sm">{formatOperatingHours(item.operatingHours)}</TableCell>
-                  <TableCell className="text-sm">{formatDate(item.nextMaintenance)}</TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
+                        <Signal className={`h-3 w-3 ${getSignalStrengthColor(signalStrength)}`} />
+                        <span className="text-sm font-medium">{Math.round(signalStrength)}%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-sm">{item.location || "Unknown"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">{item.operator || "Unassigned"}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {lastSeen ? (
+                          <div>
+                            <div className="font-medium">{formatDateForDisplay(lastSeen, 'short')}</div>
+                            <div className="text-xs text-muted-foreground">{getTimeAgo(lastSeen).fullText}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Never</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center space-x-1">
                       <Button
-                        variant="outline"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => checkEquipment(item.id)}
+                          className="h-8 w-8 p-0"
+                          title="Refresh Status"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
                         size="sm"
                         onClick={() => handleEditEquipment(item)}
+                          className="h-8 w-8 p-0"
+                          title="Edit Equipment"
                       >
                         <Edit className="h-3 w-3" />
                       </Button>
                       <Button
-                        variant="outline"
+                          variant="ghost"
                         size="sm"
                         onClick={() => handleDeleteEquipment(item.id)}
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                          title="Delete Equipment"
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
       {/* Edit Equipment Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Equipment</DialogTitle>
             <DialogDescription>
@@ -855,6 +1056,24 @@ export function MiningEquipmentDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Import/Export Dialog */}
+      <ImportExportDialog
+        isOpen={isImportExportDialogOpen}
+        onClose={() => {
+          console.log("Closing import/export dialog");
+          setIsImportExportDialogOpen(false);
+        }}
+        onImport={handleImportEquipment}
+        equipment={equipment}
+      />
+      
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs">
+          Dialog Open: {isImportExportDialogOpen ? 'Yes' : 'No'}
+        </div>
+      )}
     </div>
   );
 }

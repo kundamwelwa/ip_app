@@ -17,6 +17,9 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
+  Zap,
+  Signal,
+  Timer,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,113 +77,27 @@ export function NetworkStatusDashboard() {
 
   const [networkNodes, setNetworkNodes] = useState<NetworkNode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  // Simulate real-time data fetching
+  // Fetch real network data from API
   useEffect(() => {
     const fetchNetworkData = async () => {
       setIsLoading(true);
       try {
-        // In a real application, this would be an API call
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+        setError(null);
+        const response = await fetch("/api/network/status");
+        if (!response.ok) {
+          throw new Error("Failed to fetch network data");
+        }
+        const data = await response.json();
         
-        // Generate realistic network data
-        const nodes: NetworkNode[] = [
-          {
-            id: "RAJ-001",
-            name: "Haul Truck CAT 797F",
-            ip: "192.168.1.100",
-            macAddress: "00:1B:44:11:3A:B7",
-            status: "online",
-            signalStrength: 85,
-            lastSeen: new Date(),
-            location: "Pit A - Level 3",
-            equipmentType: "Truck",
-            meshConnections: 3,
-            dataRate: 54,
-            latency: 12,
-          },
-          {
-            id: "RAJ-002",
-            name: "Excavator CAT 6020B",
-            ip: "192.168.1.101",
-            macAddress: "00:1B:44:11:3A:B8",
-            status: "online",
-            signalStrength: 92,
-            lastSeen: new Date(),
-            location: "Pit A - Level 2",
-            equipmentType: "Excavator",
-            meshConnections: 4,
-            dataRate: 48,
-            latency: 8,
-          },
-          {
-            id: "RAJ-003",
-            name: "Drill CAT MD6640",
-            ip: "192.168.1.102",
-            macAddress: "00:1B:44:11:3A:B9",
-            status: "offline",
-            signalStrength: 0,
-            lastSeen: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-            location: "Pit B - Level 1",
-            equipmentType: "Drill",
-            meshConnections: 0,
-            dataRate: 0,
-            latency: 0,
-          },
-          {
-            id: "RAJ-004",
-            name: "Loader CAT 994K",
-            ip: "192.168.1.103",
-            macAddress: "00:1B:44:11:3A:BA",
-            status: "maintenance",
-            signalStrength: 45,
-            lastSeen: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
-            location: "Maintenance Bay",
-            equipmentType: "Loader",
-            meshConnections: 1,
-            dataRate: 12,
-            latency: 25,
-          },
-          {
-            id: "RAJ-005",
-            name: "Dozer CAT D11T",
-            ip: "192.168.1.104",
-            macAddress: "00:1B:44:11:3A:BB",
-            status: "online",
-            signalStrength: 78,
-            lastSeen: new Date(),
-            location: "Pit C - Level 4",
-            equipmentType: "Dozer",
-            meshConnections: 2,
-            dataRate: 36,
-            latency: 15,
-          },
-        ];
-
-        // Calculate network statistics
-        const stats: NetworkStats = {
-          totalNodes: nodes.length,
-          onlineNodes: nodes.filter(n => n.status === "online").length,
-          offlineNodes: nodes.filter(n => n.status === "offline").length,
-          maintenanceNodes: nodes.filter(n => n.status === "maintenance").length,
-          averageSignalStrength: Math.round(
-            nodes.filter(n => n.status === "online").reduce((sum, n) => sum + n.signalStrength, 0) /
-            nodes.filter(n => n.status === "online").length
-          ),
-          totalDataRate: nodes.reduce((sum, n) => sum + n.dataRate, 0),
-          averageLatency: Math.round(
-            nodes.filter(n => n.status === "online").reduce((sum, n) => sum + n.latency, 0) /
-            nodes.filter(n => n.status === "online").length
-          ),
-          networkHealth: "good",
-        };
-
-        setNetworkNodes(nodes);
-        setNetworkStats(stats);
-        setLastUpdated(new Date());
+        setNetworkNodes(data.networkNodes);
+        setNetworkStats(data.networkStats);
+        setLastUpdated(new Date(data.lastUpdated));
       } catch (error) {
         console.error("Failed to fetch network data:", error);
+        setError(error instanceof Error ? error.message : "An error occurred");
       } finally {
         setIsLoading(false);
       }
@@ -235,9 +152,17 @@ export function NetworkStatusDashboard() {
     }
   };
 
-  const formatLastSeen = (date: Date) => {
+  const formatLastSeen = (date: Date | string | null | undefined) => {
+    if (!date) return "Never";
+    
+    // Convert string to Date if needed
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    
+    // Check if it's a valid date
+    if (isNaN(dateObj.getTime())) return "Invalid date";
+    
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
+    const diffMs = now.getTime() - dateObj.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
     
     if (diffMins < 1) return "Just now";
@@ -269,6 +194,37 @@ export function NetworkStatusDashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Network Status</h1>
+            <p className="text-muted-foreground">
+              Real-time monitoring of Rajant mesh network
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
+              Error Loading Network Data
+            </h3>
+            <p className="text-red-700 dark:text-red-300 mb-4">{error}</p>
+            <Button 
+              onClick={() => window.location.reload()} 
+              variant="outline"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -284,7 +240,30 @@ export function NetworkStatusDashboard() {
             <Activity className="h-3 w-3 mr-1" />
             Network Health: {networkStats.networkHealth.toUpperCase()}
           </Badge>
-          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={async () => {
+              setIsLoading(true);
+              try {
+                setError(null);
+                const response = await fetch("/api/network/status");
+                if (!response.ok) {
+                  throw new Error("Failed to fetch network data");
+                }
+                const data = await response.json();
+                
+                setNetworkNodes(data.networkNodes);
+                setNetworkStats(data.networkStats);
+                setLastUpdated(new Date(data.lastUpdated));
+              } catch (error) {
+                console.error("Failed to fetch network data:", error);
+                setError(error instanceof Error ? error.message : "An error occurred");
+              } finally {
+                setIsLoading(false);
+              }
+            }}
+          >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
@@ -346,6 +325,63 @@ export function NetworkStatusDashboard() {
         </Card>
       </div>
 
+      {/* Additional Real-time Metrics */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Average Latency</CardTitle>
+            <Timer className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{networkStats.averageLatency}ms</div>
+            <p className="text-xs text-muted-foreground">
+              Real-time ping results
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Offline Nodes</CardTitle>
+            <XCircle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{networkStats.offlineNodes}</div>
+            <p className="text-xs text-muted-foreground">
+              Equipment not responding
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{networkStats.maintenanceNodes}</div>
+            <p className="text-xs text-muted-foreground">
+              Under maintenance
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Network Health</CardTitle>
+            <Signal className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${getNetworkHealthColor(networkStats.networkHealth)}`}>
+              {networkStats.networkHealth.toUpperCase()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Overall network status
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Network Nodes Table */}
       <Card>
         <CardHeader>
@@ -361,12 +397,13 @@ export function NetworkStatusDashboard() {
                 <TableHead>Node ID</TableHead>
                 <TableHead>Equipment</TableHead>
                 <TableHead>IP Address</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Real-time Status</TableHead>
                 <TableHead>Signal Strength</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Last Seen</TableHead>
                 <TableHead>Data Rate</TableHead>
                 <TableHead>Latency</TableHead>
+                <TableHead>Mesh Connections</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -384,17 +421,33 @@ export function NetworkStatusDashboard() {
                   </TableCell>
                   <TableCell className="font-mono text-sm">{node.ip}</TableCell>
                   <TableCell>
-                    <Badge className={getStatusColor(node.status)}>
-                      {getStatusIcon(node.status)}
-                      <span className="ml-1 capitalize">{node.status}</span>
-                    </Badge>
+                    <div className="flex items-center space-x-2">
+                      <Badge className={getStatusColor(node.status)}>
+                        {getStatusIcon(node.status)}
+                        <span className="ml-1 capitalize">{node.status}</span>
+                      </Badge>
+                      {node.status === "online" && (
+                        <Badge variant="outline" className="text-xs">
+                          Live
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-2">
                       <div className="w-16">
-                        <Progress value={node.signalStrength} className="h-2" />
+                        <Progress 
+                          value={node.signalStrength} 
+                          className="h-2"
+                        />
                       </div>
-                      <span className="text-sm">{node.signalStrength}%</span>
+                      <span className={`text-sm font-medium ${
+                        node.signalStrength >= 80 ? 'text-green-600' :
+                        node.signalStrength >= 60 ? 'text-yellow-600' :
+                        node.signalStrength >= 40 ? 'text-orange-600' : 'text-red-600'
+                      }`}>
+                        {node.signalStrength}%
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -406,8 +459,29 @@ export function NetworkStatusDashboard() {
                   <TableCell className="text-sm text-muted-foreground">
                     {formatLastSeen(node.lastSeen)}
                   </TableCell>
-                  <TableCell className="text-sm">{node.dataRate} Mbps</TableCell>
-                  <TableCell className="text-sm">{node.latency} ms</TableCell>
+                  <TableCell className="text-sm">
+                    <div className="flex items-center space-x-1">
+                      <Zap className="h-3 w-3 text-blue-500" />
+                      <span className="font-medium">{node.dataRate} Mbps</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <div className="flex items-center space-x-1">
+                      <Timer className="h-3 w-3 text-purple-500" />
+                      <span className={`font-medium ${
+                        node.latency <= 20 ? 'text-green-600' :
+                        node.latency <= 50 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {node.latency} ms
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <div className="flex items-center space-x-1">
+                      <Network className="h-3 w-3 text-indigo-500" />
+                      <span className="font-medium">{node.meshConnections}</span>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

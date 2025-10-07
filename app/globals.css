@@ -153,3 +153,383 @@
     background-color: rgb(107 114 128);
   }
 }
+
+/* Material UI Color Scheme for Better Readability */
+@layer components {
+  /* Primary Material UI Colors */
+  .material-primary {
+    @apply bg-blue-600 text-white;
+  }
+  
+  .material-primary-light {
+    @apply bg-blue-50 text-blue-900;
+  }
+  
+  .dark .material-primary-light {
+    @apply bg-blue-900/20 text-blue-100;
+  }
+
+  /* Secondary Material UI Colors */
+  .material-secondary {
+    @apply bg-purple-600 text-white;
+  }
+  
+  .material-secondary-light {
+    @apply bg-purple-50 text-purple-900;
+  }
+  
+  .dark .material-secondary-light {
+    @apply bg-purple-900/20 text-purple-100;
+  }
+
+  /* Success Colors */
+  .material-success {
+    @apply bg-green-600 text-white;
+  }
+  
+  .material-success-light {
+    @apply bg-green-50 text-green-900;
+  }
+  
+  .dark .material-success-light {
+    @apply bg-green-900/20 text-green-100;
+  }
+
+  /* Warning Colors */
+  .material-warning {
+    @apply bg-orange-600 text-white;
+  }
+  
+  .material-warning-light {
+    @apply bg-orange-50 text-orange-900;
+  }
+  
+  .dark .material-warning-light {
+    @apply bg-orange-900/20 text-orange-100;
+  }
+
+  /* Error Colors */
+  .material-error {
+    @apply bg-red-600 text-white;
+  }
+  
+  .material-error-light {
+    @apply bg-red-50 text-red-900;
+  }
+  
+  .dark .material-error-light {
+    @apply bg-red-900/20 text-red-100;
+  }
+
+  /* Info Colors */
+  .material-info {
+    @apply bg-cyan-600 text-white;
+  }
+  
+  .material-info-light {
+    @apply bg-cyan-50 text-cyan-900;
+  }
+  
+  .dark .material-info-light {
+    @apply bg-cyan-900/20 text-cyan-100;
+  }
+
+  /* Card Enhancements */
+  .material-card {
+    @apply bg-white border border-gray-200 shadow-sm;
+  }
+  
+  .dark .material-card {
+    @apply bg-gray-800 border-gray-700;
+  }
+
+  /* Text Colors for Better Contrast */
+  .text-primary {
+    @apply text-gray-900;
+  }
+  
+  .dark .text-primary {
+    @apply text-gray-100;
+  }
+
+  .text-secondary {
+    @apply text-gray-600;
+  }
+  
+  .dark .text-secondary {
+    @apply text-gray-400;
+  }
+
+  .text-muted {
+    @apply text-gray-500;
+  }
+  
+  .dark .text-muted {
+    @apply text-gray-500;
+  }
+
+  /* Status Indicators */
+  .status-online {
+    @apply bg-green-100 text-green-800 border border-green-200;
+  }
+  
+  .dark .status-online {
+    @apply bg-green-900/30 text-green-300 border-green-700;
+  }
+
+  .status-offline {
+    @apply bg-red-100 text-red-800 border border-red-200;
+  }
+  
+  .dark .status-offline {
+    @apply bg-red-900/30 text-red-300 border-red-700;
+  }
+
+  .status-maintenance {
+    @apply bg-yellow-100 text-yellow-800 border border-yellow-200;
+  }
+  
+  .dark .status-maintenance {
+    @apply bg-yellow-900/30 text-yellow-300 border-yellow-700;
+  }
+
+  /* Button Variants */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md transition-colors;
+  }
+  
+  .btn-success {
+    @apply bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors;
+  }
+  
+  .btn-warning {
+    @apply bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md transition-colors;
+  }
+  
+  .btn-error {
+    @apply bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors;
+  }
+
+  /* Dashboard Cards - Adaptive Contrast for Both Themes */
+  .dashboard-card {
+    @apply bg-white border border-gray-300 shadow-lg;
+  }
+  
+  .dark .dashboard-card {
+    @apply bg-gray-800 border-gray-600;
+  }
+
+  .dashboard-card-header {
+    @apply bg-gray-50 text-gray-900 border-b border-gray-200;
+  }
+  
+  .dark .dashboard-card-header {
+    @apply bg-gray-700 text-gray-100 border-gray-600;
+  }
+
+  .dashboard-card-content {
+    @apply text-gray-900;
+  }
+  
+  .dark .dashboard-card-content {
+    @apply text-gray-100;
+  }
+
+  .dashboard-card-title {
+    @apply text-gray-900 font-semibold;
+  }
+  
+  .dark .dashboard-card-title {
+    @apply text-gray-100;
+  }
+
+  .dashboard-card-subtitle {
+    @apply text-gray-700;
+  }
+  
+  .dark .dashboard-card-subtitle {
+    @apply text-gray-300;
+  }
+
+  .dashboard-card-value {
+    @apply text-gray-900 font-bold text-2xl;
+  }
+  
+  .dark .dashboard-card-value {
+    @apply text-gray-100;
+  }
+
+  .dashboard-card-description {
+    @apply text-gray-600;
+  }
+  
+  .dark .dashboard-card-description {
+    @apply text-gray-400;
+  }
+
+  /* Card Icons - Adaptive Colors */
+  .dashboard-card-icon {
+    @apply text-gray-700;
+  }
+  
+  .dark .dashboard-card-icon {
+    @apply text-gray-300;
+  }
+
+  /* Card Numbers/Values - Always Dark in Light Mode, Light in Dark Mode */
+  .dashboard-card-number {
+    @apply text-gray-900 font-bold text-3xl;
+  }
+  
+  .dark .dashboard-card-number {
+    @apply text-gray-100;
+  }
+
+  /* Card Labels - Medium Contrast */
+  .dashboard-card-label {
+    @apply text-gray-600 font-medium;
+  }
+  
+  .dark .dashboard-card-label {
+    @apply text-gray-400;
+  }
+
+  /* Force Dark Text in Light Mode for All Card Content */
+  .card-text-primary {
+    @apply text-gray-900;
+  }
+  
+  .dark .card-text-primary {
+    @apply text-gray-100;
+  }
+
+  .card-text-secondary {
+    @apply text-gray-700;
+  }
+  
+  .dark .card-text-secondary {
+    @apply text-gray-300;
+  }
+
+  .card-text-muted {
+    @apply text-gray-600;
+  }
+  
+  .dark .card-text-muted {
+    @apply text-gray-400;
+  }
+
+  /* Large Numbers - Always High Contrast */
+  .card-number-large {
+    @apply text-gray-900 font-bold text-4xl;
+  }
+  
+  .dark .card-number-large {
+    @apply text-gray-100;
+  }
+
+  /* Sidebar Scrollbar Styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thumb-gray-300 {
+    scrollbar-color: rgb(209 213 219) transparent;
+  }
+  
+  .dark .scrollbar-thumb-gray-600 {
+    scrollbar-color: rgb(75 85 99) transparent;
+  }
+  
+  .scrollbar-track-transparent {
+    scrollbar-color: transparent transparent;
+  }
+  
+  .hover\:scrollbar-thumb-gray-400:hover {
+    scrollbar-color: rgb(156 163 175) transparent;
+  }
+  
+  .dark .hover\:scrollbar-thumb-gray-500:hover {
+    scrollbar-color: rgb(107 114 128) transparent;
+  }
+
+  /* Status Text - High Contrast */
+  .card-status-text {
+    @apply text-gray-800 font-medium;
+  }
+  
+  .dark .card-status-text {
+    @apply text-gray-200;
+  }
+
+  /* Status Badges with Better Contrast */
+  .status-badge-online {
+    @apply bg-green-100 text-green-800 border border-green-300 font-medium;
+  }
+  
+  .dark .status-badge-online {
+    @apply bg-green-900/40 text-green-200 border-green-600;
+  }
+
+  .status-badge-offline {
+    @apply bg-red-100 text-red-800 border border-red-300 font-medium;
+  }
+  
+  .dark .status-badge-offline {
+    @apply bg-red-900/40 text-red-200 border-red-600;
+  }
+
+  .status-badge-maintenance {
+    @apply bg-yellow-100 text-yellow-800 border border-yellow-300 font-medium;
+  }
+  
+  .dark .status-badge-maintenance {
+    @apply bg-yellow-900/40 text-yellow-200 border-yellow-600;
+  }
+
+  /* Metric Cards */
+  .metric-card {
+    @apply bg-indigo-50 border border-indigo-200 rounded-lg p-4;
+  }
+  
+  .dark .metric-card {
+    @apply bg-indigo-900/20 border-indigo-700;
+  }
+
+  .metric-value {
+    @apply text-indigo-900 font-bold text-xl;
+  }
+  
+  .dark .metric-value {
+    @apply text-indigo-100;
+  }
+
+  .metric-label {
+    @apply text-indigo-700 text-sm font-medium;
+  }
+  
+  .dark .metric-label {
+    @apply text-indigo-300;
+  }
+
+  /* Progress Bars */
+  .progress-bar {
+    @apply bg-indigo-200 rounded-full;
+  }
+  
+  .dark .progress-bar {
+    @apply bg-indigo-800;
+  }
+
+  .progress-fill {
+    @apply bg-indigo-600 rounded-full;
+  }
+  
+  .dark .progress-fill {
+    @apply bg-indigo-400;
+  }
+}

@@ -26,6 +26,7 @@ model User {
   // Relations
   ipAssignments IPAssignment[]
   auditLogs     AuditLog[]
+  resolvedAlerts Alert[] @relation("AlertResolver")
 
   @@map("users")
 }
@@ -52,6 +53,7 @@ model IPAddress {
   // Relations
   assignments IPAssignment[]
   auditLogs   AuditLog[]
+  alerts      Alert[]
 
   @@map("ip_addresses")
 }
@@ -68,22 +70,39 @@ model Equipment {
   id          String   @id @default(cuid())
   name        String
   type        EquipmentType
+  model       String?
+  manufacturer String?
   macAddress  String?  @unique
   serialNumber String?
   location    String?
+  operator    String?
   description String?
+  notes       String?
   status      EquipmentStatus @default(ONLINE)
+  lastSeen    DateTime?
+  meshStrength Int?    // 0-100 mesh signal strength
+  nodeId      String?  // Rajant node ID
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   ipAssignments IPAssignment[]
   auditLogs     AuditLog[]
+  alerts        Alert[]
 
   @@map("equipment")
 }
 
 enum EquipmentType {
+  TRUCK
+  EXCAVATOR
+  DRILL
+  LOADER
+  DOZER
+  SHOVEL
+  CRUSHER
+  CONVEYOR
+  RAJANT_NODE
   COMPUTER
   SERVER
   PRINTER
@@ -153,4 +172,59 @@ model NetworkConfig {
   updatedAt   DateTime @updatedAt
 
   @@map("network_configs")
+}
+
+// Network Monitoring
+model NetworkStats {
+  id          String   @id @default(cuid())
+  totalNodes  Int      @default(0)
+  activeNodes Int      @default(0)
+  meshStrength Int     @default(0) // Average mesh strength
+  bandwidth   String?  // e.g., "2.4 Gbps"
+  latency     Int?     // in milliseconds
+  uptime      Float    @default(0.0) // percentage
+  recordedAt  DateTime @default(now())
+  
+  @@map("network_stats")
+}
+
+// System Alerts
+model Alert {
+  id          String   @id @default(cuid())
+  type        AlertType
+  message     String
+  severity    AlertSeverity @default(INFO)
+  equipmentId String?
+  ipAddressId String?
+  isResolved  Boolean  @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  equipment  Equipment? @relation(fields: [equipmentId], references: [id])
+  ipAddress  IPAddress? @relation(fields: [ipAddressId], references: [id])
+  resolver   User?      @relation("AlertResolver", fields: [resolvedBy], references: [id])
+
+  @@map("alerts")
+}
+
+enum AlertType {
+  NETWORK_DISCONNECTION
+  EQUIPMENT_OFFLINE
+  IP_CONFLICT
+  MESH_WEAK_SIGNAL
+  SYSTEM_ERROR
+  MAINTENANCE_REQUIRED
+  SECURITY_BREACH
+  OTHER
+}
+
+enum AlertSeverity {
+  LOW
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
 }
