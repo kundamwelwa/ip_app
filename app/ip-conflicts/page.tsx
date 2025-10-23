@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { IPConflictDetection } from "@/components/ip/ip-conflict-detection";
 
 export default function IPConflictPage() {
   const { data: session, status } = useSession();
@@ -29,4 +30,10 @@ export default function IPConflictPage() {
   if (!session) {
     return null;
   }
+
+  return (
+    <DashboardLayout>
+      <IPConflictDetection />
+    </DashboardLayout>
+  );
 }

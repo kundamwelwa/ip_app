@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -99,6 +97,14 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Update IP address status to ASSIGNED
+    await prisma.iPAddress.update({
+      where: { id: ipAddressRecord.id },
+      data: { 
+        status: "ASSIGNED"
+      }
+    });
+
     // Update equipment status to ONLINE if it was OFFLINE
     if (equipment.status === "OFFLINE") {
       await prisma.equipment.update({
@@ -109,6 +115,24 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    // Create audit log for the assignment
+    await prisma.auditLog.create({
+      data: {
+        action: "IP_ASSIGNED",
+        entityType: "IP_ADDRESS",
+        entityId: ipAddressRecord.id,
+        userId: session.user?.id || "system",
+        ipAddressId: ipAddressRecord.id,
+        equipmentId: equipmentId,
+        details: {
+          ipAddress: ipAddress,
+          equipmentName: equipment.name,
+          equipmentType: equipment.type,
+          notes: notes
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -156,7 +180,8 @@ export async function DELETE(request: NextRequest) {
         isActive: true
       },
       include: {
-        equipment: true
+        equipment: true,
+        ipAddress: true
       }
     });
 
@@ -173,6 +198,32 @@ export async function DELETE(request: NextRequest) {
       data: { 
         isActive: false,
         releasedAt: new Date()
+      }
+    });
+
+    // Update IP address status back to AVAILABLE
+    await prisma.iPAddress.update({
+      where: { id: assignment.ipAddressId },
+      data: { 
+        status: "AVAILABLE"
+      }
+    });
+
+    // Create audit log for the unassignment
+    await prisma.auditLog.create({
+      data: {
+        action: "IP_UNASSIGNED",
+        entityType: "IP_ADDRESS",
+        entityId: assignment.ipAddressId,
+        userId: session.user?.id || "system",
+        ipAddressId: assignment.ipAddressId,
+        equipmentId: assignment.equipmentId,
+        details: {
+          ipAddress: assignment.ipAddress.address,
+          equipmentName: assignment.equipment.name,
+          equipmentType: assignment.equipment.type,
+          releasedAt: new Date()
+        }
       }
     });
 

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { recordNetworkStats } from "@/lib/network-stats-recorder";
 
 export async function GET(request: NextRequest) {
   try {
@@ -122,6 +121,30 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching network stats:", error);
     return NextResponse.json(
       { error: "Failed to fetch network statistics" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Record current network statistics
+    const result = await recordNetworkStats();
+
+    return NextResponse.json({
+      success: true,
+      message: "Network statistics recorded successfully",
+      stats: result,
+    });
+  } catch (error) {
+    console.error("Error recording network stats:", error);
+    return NextResponse.json(
+      { error: "Failed to record network statistics" },
       { status: 500 }
     );
   }

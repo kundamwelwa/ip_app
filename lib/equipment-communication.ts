@@ -1,8 +1,12 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { exec } from "child_process";
 import { promisify } from "util";
+import {
+  autoResolveEquipmentAlerts,
+  createEquipmentOfflineAlert,
+  createWeakSignalAlert,
+} from "@/lib/data-consistency";
 
-const prisma = new PrismaClient();
 const execAsync = promisify(exec);
 
 export interface EquipmentCommunicationResult {
@@ -115,19 +119,20 @@ export async function checkEquipmentStatus(equipmentId: string): Promise<Equipme
     // Update equipment status based on ping result
     const newStatus = pingResult.isOnline ? "ONLINE" : "OFFLINE";
     const lastSeen = pingResult.isOnline ? new Date() : (equipment.lastSeen || new Date());
+    const calculatedMeshStrength = pingResult.isOnline ? 
+      Math.max(0, 100 - (pingResult.responseTime || 0) / 10) : 
+      equipment.meshStrength;
 
     await prisma.equipment.update({
       where: { id: equipmentId },
       data: {
         status: newStatus,
         lastSeen,
-        meshStrength: pingResult.isOnline ? 
-          Math.max(0, 100 - (pingResult.responseTime || 0) / 10) : 
-          equipment.meshStrength
+        meshStrength: calculatedMeshStrength
       }
     });
 
-    // Create audit log for status change
+    // Handle status changes and alerts
     if (equipment.status !== newStatus) {
       try {
         // Try to find a system user or create one if it doesn't exist
@@ -148,6 +153,7 @@ export async function checkEquipmentStatus(equipmentId: string): Promise<Equipme
           });
         }
 
+        // Create audit log for status change
         await prisma.auditLog.create({
           data: {
             action: "EQUIPMENT_STATUS_CHANGED",
@@ -163,24 +169,28 @@ export async function checkEquipmentStatus(equipmentId: string): Promise<Equipme
             }
           }
         });
-      } catch (auditError) {
-        console.warn("Failed to create audit log:", auditError);
-        // Continue execution even if audit log creation fails
-      }
 
-      // Create alert if equipment goes offline
-      if (newStatus === "OFFLINE") {
-        await prisma.alert.create({
-          data: {
-            type: "EQUIPMENT_OFFLINE",
-            severity: "ERROR",
-            message: `Equipment ${equipment.name} is offline`,
-            equipmentId: equipmentId,
-            ipAddressId: activeAssignment.ipAddressId,
-            isResolved: false
-          }
-        });
+        // Handle alert creation/resolution
+        if (newStatus === "OFFLINE") {
+          // Create offline alert
+          await createEquipmentOfflineAlert(
+            equipmentId,
+            `Equipment ${equipment.name} is offline`,
+            "ERROR"
+          );
+        } else if (newStatus === "ONLINE") {
+          // Auto-resolve offline alerts
+          await autoResolveEquipmentAlerts(equipmentId, systemUser.id);
+        }
+      } catch (auditError) {
+        console.warn("Failed to create audit log or handle alerts:", auditError);
+        // Continue execution even if audit/alert operations fail
       }
+    }
+
+    // Check for weak mesh signal and create alert if needed
+    if (pingResult.isOnline && calculatedMeshStrength < 50) {
+      await createWeakSignalAlert(equipmentId, calculatedMeshStrength);
     }
 
     return {
