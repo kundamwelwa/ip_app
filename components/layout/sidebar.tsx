@@ -37,6 +37,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { isSidebarFeatureEnabled, sidebarFeatures } from "@/lib/feature-flags";
 
 const navigation = [
   {
@@ -46,11 +47,13 @@ const navigation = [
         title: "Dashboard",
         href: "/dashboard",
         icon: BarChart3,
+        featureFlag: "dashboard",
       },
       {
         title: "Network Status",
         href: "/network-status",
         icon: Activity,
+        featureFlag: "networkStatus",
       },
     ],
   },
@@ -61,16 +64,19 @@ const navigation = [
         title: "Mining Equipment",
         href: "/equipment",
         icon: Truck,
+        featureFlag: "miningEquipment",
       },
       {
         title: "Rajant Nodes",
         href: "/nodes",
         icon: Router,
+        featureFlag: "rajantNodes",
       },
       {
         title: "Mesh Network",
         href: "/mesh",
         icon: Network,
+        featureFlag: "meshNetwork",
       },
     ],
   },
@@ -81,16 +87,19 @@ const navigation = [
         title: "IP Management",
         href: "/ip-management",
         icon: Monitor,
+        featureFlag: "ipManagement",
       },
       {
         title: "IP Assignment",
         href: "/ip-assignment",
         icon: MapPin,
+        featureFlag: "ipAssignment",
       },
       {
         title: "IP Monitoring",
         href: "/ip-monitoring",
         icon: Activity,
+        featureFlag: "ipMonitoring",
       },
       
     ],
@@ -102,16 +111,19 @@ const navigation = [
         title: "Equipment Status",
         href: "/status",
         icon: HardHat,
+        featureFlag: "equipmentStatus",
       },
       {
         title: "Alerts",
         href: "/alerts",
         icon: AlertTriangle,
+        featureFlag: "alerts",
       },
       {
         title: "Reports",
         href: "/reports",
         icon: BarChart3,
+        featureFlag: "reports",
       },
     ],
   },
@@ -122,26 +134,31 @@ const navigation = [
         title: "Users",
         href: "/users",
         icon: Users,
+        featureFlag: "users",
       },
       {
         title: "Settings",
         href: "/settings",
         icon: Settings,
+        featureFlag: "settings",
       },
       {
         title: "Logs",
         href: "/logs",
         icon: FileText,
+        featureFlag: "logs",
       },
       {
         title: "Backup",
         href: "/backup",
         icon: HardDrive,
+        featureFlag: "backup",
       },
       {
         title: "Maintenance",
         href: "/maintenance",
         icon: Wrench,
+        featureFlag: "maintenance",
       },
     ],
   },
@@ -152,21 +169,25 @@ const navigation = [
         title: "Network Scanner",
         href: "/tools/scanner",
         icon: Search,
+        featureFlag: "networkScanner",
       },
       {
         title: "Ping Tool",
         href: "/tools/ping",
         icon: Radio,
+        featureFlag: "pingTool",
       },
       {
         title: "Traceroute",
         href: "/tools/traceroute",
         icon: Route,
+        featureFlag: "traceroute",
       },
       {
         title: "Bandwidth Test",
         href: "/tools/bandwidth",
         icon: Gauge,
+        featureFlag: "bandwidthTest",
       },
     ],
   },
@@ -237,43 +258,54 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       {/* Navigation */}
       <div className="flex-1 px-3 py-4 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500">
         <nav className="space-y-1">
-          {navigation.map((section, sectionIndex) => (
-            <div key={section.title}>
-              {!isCollapsed && (
-                <div className="px-3 py-2">
-                  <h3 className="mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.title}
-                  </h3>
-                </div>
-              )}
-              <div className="space-y-1">
-                {section.items.map((item) => {
-                  const isActive = pathname === item.href;
-                  const buttonContent = (
-                    <Button
-                      key={item.href}
-                      asChild
-                      variant={isActive ? "secondary" : "ghost"}
-                      className={cn(
-                        "w-full justify-start text-left transition-all duration-200 ease-in-out",
-                        isActive && "bg-primary/10 text-primary",
-                        isCollapsed ? "px-2" : "px-3"
-                      )}
-                    >
-                      <Link href={item.href}>
-                        <item.icon className={cn(
-                          "h-4 w-4 flex-shrink-0 transition-all duration-300 ease-in-out",
-                          !isCollapsed && "mr-3"
-                        )} />
-                        <span className={cn(
-                          "transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap",
-                          isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-                        )}>
-                          {item.title}
-                        </span>
-                      </Link>
-                    </Button>
-                  );
+          {navigation.map((section, sectionIndex) => {
+            // Filter items based on feature flags
+            const enabledItems = section.items.filter((item) =>
+              isSidebarFeatureEnabled(item.featureFlag as keyof typeof sidebarFeatures)
+            );
+
+            // Skip entire section if no items are enabled
+            if (enabledItems.length === 0) {
+              return null;
+            }
+
+            return (
+              <div key={section.title}>
+                {!isCollapsed && (
+                  <div className="px-3 py-2">
+                    <h3 className="mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {section.title}
+                    </h3>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {enabledItems.map((item) => {
+                    const isActive = pathname === item.href;
+                    const buttonContent = (
+                      <Button
+                        key={item.href}
+                        asChild
+                        variant={isActive ? "secondary" : "ghost"}
+                        className={cn(
+                          "w-full justify-start text-left transition-all duration-200 ease-in-out",
+                          isActive && "bg-primary/10 text-primary",
+                          isCollapsed ? "px-2" : "px-3"
+                        )}
+                      >
+                        <Link href={item.href}>
+                          <item.icon className={cn(
+                            "h-4 w-4 flex-shrink-0 transition-all duration-300 ease-in-out",
+                            !isCollapsed && "mr-3"
+                          )} />
+                          <span className={cn(
+                            "transition-all duration-300 ease-in-out overflow-hidden whitespace-nowrap",
+                            isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+                          )}>
+                            {item.title}
+                          </span>
+                        </Link>
+                      </Button>
+                    );
 
                   if (isCollapsed) {
                     return (
@@ -290,14 +322,15 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     );
                   }
 
-                  return buttonContent;
-                })}
+                    return buttonContent;
+                  })}
+                </div>
+                {sectionIndex < navigation.length - 1 && !isCollapsed && (
+                  <Separator className="my-4" />
+                )}
               </div>
-              {sectionIndex < navigation.length - 1 && !isCollapsed && (
-                <Separator className="my-4" />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </nav>
       </div>
 

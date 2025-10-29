@@ -41,6 +41,7 @@ import { ReservationDialog, ReservationFormData } from "@/components/ip/reservat
 import { MeshTopology } from "@/components/network/mesh-topology";
 import { processEquipmentData, calculateNetworkStats, getNetworkHealthColor, getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 import { getTimeAgo, formatDateForDisplay } from "@/lib/time-utils";
+import { isDashboardFeatureEnabled } from "@/lib/feature-flags";
 
 // Types for API data
 interface DashboardEquipment {
@@ -106,7 +107,14 @@ interface DashboardData {
 }
 
 export function MiningDashboard() {
-  const [selectedTab, setSelectedTab] = useState("overview");
+  // Set default tab based on enabled features
+  const getDefaultTab = () => {
+    if (isDashboardFeatureEnabled("showEquipmentSection")) return "equipment";
+    if (isDashboardFeatureEnabled("showAlertsSection")) return "alerts";
+    if (isDashboardFeatureEnabled("showOverviewTab")) return "overview";
+    return "equipment";
+  };
+  const [selectedTab, setSelectedTab] = useState(getDefaultTab());
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [isEquipmentSelectionOpen, setIsEquipmentSelectionOpen] = useState(false);
   const [isReserveDialogOpen, setIsReserveDialogOpen] = useState(false);
@@ -392,172 +400,242 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
             Real-time monitoring of Rajant mesh network and mining equipment
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Badge className="quantum-status-online quantum-pulse">
-            <Activity className="mr-1 h-3 w-3" />
-            Live Monitoring
-          </Badge>
+        {isDashboardFeatureEnabled("showMonitoringControls") && (
           <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fetchDashboardData(true)}
-              disabled={loading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Real-time Check
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring()}
-              disabled={isMonitoringLoading}
-            >
-              {monitoringStatus.isRunning ? (
-                <>
-                  <Pause className="mr-2 h-4 w-4" />
-                  Stop Monitor
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2 h-4 w-4" />
-                  Start Monitor
-                </>
-              )}
-            </Button>
-            <Badge variant={monitoringStatus.isRunning ? "default" : "secondary"}>
-              {monitoringStatus.isRunning ? "Monitoring Active" : "Monitoring Inactive"}
+            <Badge className="quantum-status-online quantum-pulse">
+              <Activity className="mr-1 h-3 w-3" />
+              Live Monitoring
             </Badge>
+            <div className="flex items-center space-x-2">
+              {isDashboardFeatureEnabled("showRealTimeCheckButton") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchDashboardData(true)}
+                  disabled={loading}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  Real-time Check
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring()}
+                disabled={isMonitoringLoading}
+              >
+                {monitoringStatus.isRunning ? (
+                  <>
+                    <Pause className="mr-2 h-4 w-4" />
+                    Stop Monitor
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Monitor
+                  </>
+                )}
+              </Button>
+              <Badge variant={monitoringStatus.isRunning ? "default" : "secondary"}>
+                {monitoringStatus.isRunning ? "Monitoring Active" : "Monitoring Inactive"}
+              </Badge>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* IP Address Checker Section */}
-      <IPChecker
-        onAssignIP={handleAssignIP}
-        onReserveIP={handleReserveIP}
-        onViewDetails={handleViewDetails}
-        onUnassign={handleUnassign}
-        onRefresh={handleRefresh}
-        onAssignmentComplete={async () => {
-          // This will trigger the IP checker to refresh
-          console.log("Assignment completed, refreshing IP status");
-          await fetchDashboardData();
-        }}
-      />
+      {isDashboardFeatureEnabled("ipChecker") && (
+        <IPChecker
+          onAssignIP={handleAssignIP}
+          onReserveIP={handleReserveIP}
+          onViewDetails={handleViewDetails}
+          onUnassign={handleUnassign}
+          onRefresh={handleRefresh}
+          onAssignmentComplete={async () => {
+            // This will trigger the IP checker to refresh
+            console.log("Assignment completed, refreshing IP status");
+            await fetchDashboardData();
+          }}
+        />
+      )}
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="dashboard-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="dashboard-card-title text-sm font-medium">Total Equipment</CardTitle>
-            <Truck className="dashboard-card-icon h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="card-number-large">{dashboardData.equipment.length}</div>
-            <p className="card-text-secondary text-xs">
-              {equipmentStatuses.length > 0 ? getOnlineCount() : dashboardData.equipment.filter(eq => eq.status === "ONLINE").length} online
-              {equipmentStatuses.length > 0 && (
-                <span className="ml-2 text-green-600">
-                  (Real-time: {getOnlineCount()}/{equipmentStatuses.length})
-                </span>
-              )}
-            </p>
-          </CardContent>
-        </Card>
+        {isDashboardFeatureEnabled("showTotalEquipmentsCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Total Equipment</CardTitle>
+              <Truck className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="card-number-large">{dashboardData.equipment.length}</div>
+              <p className="card-text-secondary text-xs">
+                {equipmentStatuses.length > 0 ? getOnlineCount() : dashboardData.equipment.filter(eq => eq.status === "ONLINE").length} online
+                {equipmentStatuses.length > 0 && (
+                  <span className="ml-2 text-green-600">
+                    (Real-time: {getOnlineCount()}/{equipmentStatuses.length})
+                  </span>
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="dashboard-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="dashboard-card-title text-sm font-medium">Mesh Nodes</CardTitle>
-            <Router className="dashboard-card-icon h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="card-number-large">{dashboardData.networkStats.activeNodes}</div>
-            <p className="card-text-secondary text-xs">
-              {dashboardData.networkStats.totalNodes} total nodes
-            </p>
-          </CardContent>
-        </Card>
+        {isDashboardFeatureEnabled("showTotalIPAddressesCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Total IP Addresses</CardTitle>
+              <Network className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="card-number-large">{dashboardData.ipSummary.total}</div>
+              <p className="card-text-secondary text-xs">
+                IP addresses in system
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="dashboard-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="dashboard-card-title text-sm font-medium">Network Uptime</CardTitle>
-            <Shield className="dashboard-card-icon h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className={`card-number-large ${getUptimeColor(dashboardData.networkStats.uptime)}`}>
-              {dashboardData.networkStats.uptime}%
-            </div>
-            <p className="card-text-secondary text-xs">
-              {dashboardData.networkStats.uptimeFormatted || 'Last 30 days'}
-            </p>
-            <div className="mt-2">
-              <div className="flex items-center space-x-2">
-                <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                  <div
-                    className={`h-2 rounded-full ${
-                      dashboardData.networkStats.uptime >= 95 
-                        ? 'bg-green-500' 
-                        : dashboardData.networkStats.uptime >= 85 
-                          ? 'bg-yellow-500' 
-                          : 'bg-red-500'
-                    }`}
-                    style={{ width: `${dashboardData.networkStats.uptime}%` }}
-                  ></div>
-                </div>
-                <Badge variant="outline" className="text-xs">
-                  {dashboardData.networkStats.networkHealth || 'good'}
-                </Badge>
+        {isDashboardFeatureEnabled("showAssignedIPAddressesCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Assigned IPs</CardTitle>
+              <CheckCircle className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="card-number-large text-green-600">{dashboardData.ipSummary.assigned}</div>
+              <p className="card-text-secondary text-xs">
+                {dashboardData.ipSummary.total > 0 
+                  ? `${Math.round((dashboardData.ipSummary.assigned / dashboardData.ipSummary.total) * 100)}% of total`
+                  : "No IPs available"}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardFeatureEnabled("showUnassignedIPAddressesCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Unassigned IPs</CardTitle>
+              <XCircle className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="card-number-large text-blue-600">{dashboardData.ipSummary.available}</div>
+              <p className="card-text-secondary text-xs">
+                Available for assignment
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardFeatureEnabled("showMeshNodesCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Mesh Nodes</CardTitle>
+              <Router className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="card-number-large">{dashboardData.networkStats.activeNodes}</div>
+              <p className="card-text-secondary text-xs">
+                {dashboardData.networkStats.totalNodes} total nodes
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardFeatureEnabled("showNetworkUptimeCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Network Uptime</CardTitle>
+              <Shield className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className={`card-number-large ${getUptimeColor(dashboardData.networkStats.uptime)}`}>
+                {dashboardData.networkStats.uptime}%
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="dashboard-card">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="dashboard-card-title text-sm font-medium">Mesh Strength</CardTitle>
-            <Network className="dashboard-card-icon h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className={`card-number-large ${getSignalStrengthColor(dashboardData.networkStats.meshStrength)}`}>
-              {dashboardData.networkStats.meshStrength}%
-            </div>
-            <p className="card-text-secondary text-xs">
-              Average signal quality
-            </p>
-            <div className="mt-2">
-              <div className="flex items-center space-x-2">
-                <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                  <div
-                    className={`h-2 rounded-full ${
-                      dashboardData.networkStats.meshStrength >= 80 
-                        ? 'bg-blue-500' 
-                        : dashboardData.networkStats.meshStrength >= 60 
-                          ? 'bg-yellow-500' 
-                          : 'bg-red-500'
-                    }`}
-                    style={{ width: `${dashboardData.networkStats.meshStrength}%` }}
-                  ></div>
+              <p className="card-text-secondary text-xs">
+                {dashboardData.networkStats.uptimeFormatted || 'Last 30 days'}
+              </p>
+              <div className="mt-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                    <div
+                      className={`h-2 rounded-full ${
+                        dashboardData.networkStats.uptime >= 95 
+                          ? 'bg-green-500' 
+                          : dashboardData.networkStats.uptime >= 85 
+                            ? 'bg-yellow-500' 
+                            : 'bg-red-500'
+                      }`}
+                      style={{ width: `${dashboardData.networkStats.uptime}%` }}
+                    ></div>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {dashboardData.networkStats.networkHealth || 'good'}
+                  </Badge>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {dashboardData.networkStats.averageResponseTime ? `${dashboardData.networkStats.averageResponseTime}ms avg` : 'N/A'}
-                </span>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardFeatureEnabled("showMeshStrengthCard") && (
+          <Card className="dashboard-card">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="dashboard-card-title text-sm font-medium">Mesh Strength</CardTitle>
+              <Network className="dashboard-card-icon h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className={`card-number-large ${getSignalStrengthColor(dashboardData.networkStats.meshStrength)}`}>
+                {dashboardData.networkStats.meshStrength}%
+              </div>
+              <p className="card-text-secondary text-xs">
+                Average signal quality
+              </p>
+              <div className="mt-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                    <div
+                      className={`h-2 rounded-full ${
+                        dashboardData.networkStats.meshStrength >= 80 
+                          ? 'bg-blue-500' 
+                          : dashboardData.networkStats.meshStrength >= 60 
+                            ? 'bg-yellow-500' 
+                            : 'bg-red-500'
+                      }`}
+                      style={{ width: `${dashboardData.networkStats.meshStrength}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {dashboardData.networkStats.averageResponseTime ? `${dashboardData.networkStats.averageResponseTime}ms avg` : 'N/A'}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Main Content Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="equipment">Equipment</TabsTrigger>
-          <TabsTrigger value="network">Network</TabsTrigger>
-          <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          {isDashboardFeatureEnabled("showOverviewTab") && (
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+          )}
+          {isDashboardFeatureEnabled("showEquipmentSection") && (
+            <TabsTrigger value="equipment">Equipment</TabsTrigger>
+          )}
+          {isDashboardFeatureEnabled("showNetworkTab") && (
+            <TabsTrigger value="network">Network</TabsTrigger>
+          )}
+          {isDashboardFeatureEnabled("showAlertsSection") && (
+            <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
+        {isDashboardFeatureEnabled("showOverviewTab") && (
+          <TabsContent value="overview" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             {/* Equipment Status Overview */}
             <Card>
@@ -676,8 +754,10 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
             </Card>
           </div>
         </TabsContent>
+        )}
 
-        <TabsContent value="equipment" className="space-y-4">
+        {isDashboardFeatureEnabled("showEquipmentSection") && (
+          <TabsContent value="equipment" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Equipment Details</CardTitle>
@@ -780,12 +860,16 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
-        <TabsContent value="network" className="space-y-4">
-          <MeshTopology />
-        </TabsContent>
+        {isDashboardFeatureEnabled("showNetworkTopologySection") && (
+          <TabsContent value="network" className="space-y-4">
+            <MeshTopology />
+          </TabsContent>
+        )}
 
-        <TabsContent value="alerts" className="space-y-4">
+        {isDashboardFeatureEnabled("showAlertsSection") && (
+          <TabsContent value="alerts" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>System Alerts</CardTitle>
@@ -811,10 +895,13 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* Quick Actions Section */}
-      <QuickActions />
+      {isDashboardFeatureEnabled("showQuickActionsSection") && (
+        <QuickActions />
+      )}
 
       {/* Equipment Selection Dialog */}
       <EquipmentSelectionDialog
