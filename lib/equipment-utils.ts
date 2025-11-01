@@ -123,17 +123,17 @@ export function exportToCSV(equipment: MiningEquipment[]): string {
     item.type,
     item.model,
     item.manufacturer,
-    item.serialNumber,
-    item.ipAddress,
+    item.serialNumber || '',
+    item.ipAddress || '',
     item.macAddress,
     item.status,
-    item.location,
-    item.operator,
-    item.operatingHours.toString(),
-    item.fuelLevel.toString(),
-    item.lastMaintenance.toISOString().split('T')[0],
-    item.nextMaintenance.toISOString().split('T')[0],
-    item.notes,
+    item.location || '',
+    item.operator || '',
+    item.operatingHours?.toString() || '0',
+    item.fuelLevel?.toString() || '0',
+    item.lastMaintenance ? item.lastMaintenance.toISOString().split('T')[0] : '',
+    item.nextMaintenance ? item.nextMaintenance.toISOString().split('T')[0] : '',
+    item.notes || '',
     item.createdAt.toISOString().split('T')[0],
     item.updatedAt.toISOString().split('T')[0]
   ]);
@@ -146,30 +146,61 @@ export function exportToCSV(equipment: MiningEquipment[]): string {
 }
 
 /**
- * Parses CSV data to equipment import format
+ * Parses CSV data to equipment import format with proper quote handling
  */
 export function parseCSVToEquipment(csvContent: string): EquipmentImportData[] {
   const lines = csvContent.split('\n').filter(line => line.trim());
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
   const data: EquipmentImportData[] = [];
 
+  // Parse CSV line with proper quote handling
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Handle escaped quotes
+          current += '"';
+          i++;
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  // Skip header row
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+    const values = parseCSVLine(lines[i]);
     
-    if (values.length >= headers.length) {
+    if (values.length >= 8) { // At least 8 required fields
       const equipment: EquipmentImportData = {
         name: values[0] || '',
         type: values[1] || '',
         model: values[2] || '',
         manufacturer: values[3] || '',
-        serialNumber: values[4] || '',
-        ipAddress: values[5] || '',
-        macAddress: values[6] || '',
-        location: values[7] || '',
-        operator: values[8] || '',
-        notes: values[9] || ''
+        macAddress: values[4] || '',
+        serialNumber: values[5] || '',
+        ipAddress: '', // IP will be assigned later
+        location: values[6] || '',
+        operator: values[7] || '',
+        notes: values[8] || ''
       };
       data.push(equipment);
     }
@@ -227,16 +258,20 @@ export function convertImportDataToEquipment(data: EquipmentImportData): Omit<Mi
     model: data.model,
     manufacturer: data.manufacturer,
     serialNumber: data.serialNumber,
-    ipAddress: data.ipAddress,
+    ipAddress: data.ipAddress || '',
     macAddress: data.macAddress,
-    status: 'offline' as const, // Default status for imported equipment
+    status: 'OFFLINE' as const, // Default status for imported equipment
     location: data.location,
     operator: data.operator,
-    lastMaintenance: new Date(),
-    nextMaintenance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-    operatingHours: 0,
-    fuelLevel: 0,
-    notes: data.notes || ''
+    description: data.notes || null,
+    notes: data.notes || null,
+    lastSeen: null,
+    meshStrength: null,
+    nodeId: null,
+    lastMaintenance: undefined,
+    nextMaintenance: undefined,
+    operatingHours: undefined,
+    fuelLevel: undefined
   };
 }
 

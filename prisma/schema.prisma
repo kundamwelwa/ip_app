@@ -26,7 +26,10 @@ model User {
   // Relations
   ipAssignments IPAssignment[]
   auditLogs     AuditLog[]
-  resolvedAlerts Alert[] @relation("AlertResolver")
+  acknowledgedAlerts Alert[] @relation("AlertAcknowledger")
+  approvedAlerts     Alert[] @relation("AlertApprover")
+  rejectedAlerts     Alert[] @relation("AlertRejecter")
+  resolvedAlerts     Alert[] @relation("AlertResolver")
 
   @@map("users")
 }
@@ -192,32 +195,66 @@ model NetworkStats {
 model Alert {
   id          String   @id @default(cuid())
   type        AlertType
+  title       String   @default("System Alert")
   message     String
   severity    AlertSeverity @default(INFO)
+  status      AlertStatus   @default(PENDING)
+  
+  // Related entities
   equipmentId String?
   ipAddressId String?
-  isResolved  Boolean  @default(false)
-  resolvedAt  DateTime?
-  resolvedBy  String?
+  entityType  String?       // Type of entity that triggered alert (e.g., "EQUIPMENT", "IP_ADDRESS", "USER")
+  entityId    String?       // ID of the entity
+  details     Json?         // Additional alert details
+  
+  // Workflow tracking
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedBy     String?
+  rejectedAt     DateTime?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  
+  // Resolution
+  isResolved     Boolean @default(false)
+  resolutionNote String?
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
-  equipment  Equipment? @relation(fields: [equipmentId], references: [id])
-  ipAddress  IPAddress? @relation(fields: [ipAddressId], references: [id])
-  resolver   User?      @relation("AlertResolver", fields: [resolvedBy], references: [id])
+  equipment    Equipment? @relation(fields: [equipmentId], references: [id])
+  ipAddress    IPAddress? @relation(fields: [ipAddressId], references: [id])
+  acknowledger User?      @relation("AlertAcknowledger", fields: [acknowledgedBy], references: [id])
+  approver     User?      @relation("AlertApprover", fields: [approvedBy], references: [id])
+  rejecter     User?      @relation("AlertRejecter", fields: [rejectedBy], references: [id])
+  resolver     User?      @relation("AlertResolver", fields: [resolvedBy], references: [id])
 
   @@map("alerts")
 }
 
 enum AlertType {
-  NETWORK_DISCONNECTION
+  EQUIPMENT_ADDED
+  EQUIPMENT_UPDATED
+  EQUIPMENT_DELETED
   EQUIPMENT_OFFLINE
+  IP_ASSIGNED
+  IP_UNASSIGNED
   IP_CONFLICT
+  IP_ADDRESS_ADDED
+  IP_ADDRESS_UPDATED
+  IP_ADDRESS_DELETED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  CONFIG_CHANGED
+  NETWORK_DISCONNECTION
   MESH_WEAK_SIGNAL
-  SYSTEM_ERROR
   MAINTENANCE_REQUIRED
   SECURITY_BREACH
+  SYSTEM_ERROR
   OTHER
 }
 
@@ -227,4 +264,12 @@ enum AlertSeverity {
   WARNING
   ERROR
   CRITICAL
+}
+
+enum AlertStatus {
+  PENDING
+  ACKNOWLEDGED
+  APPROVED
+  REJECTED
+  RESOLVED
 }

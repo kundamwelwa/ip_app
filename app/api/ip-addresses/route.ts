@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import * as alertService from "@/lib/alert-service";
 
 export async function GET(request: NextRequest) {
   try {
@@ -164,6 +165,13 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Create alert for admin approval
+    await alertService.alertIPAddressAdded(
+      ipAddress.id,
+      ipAddress.address,
+      session.user.id
+    );
 
     return NextResponse.json(ipAddress, { status: 201 });
   } catch (error) {

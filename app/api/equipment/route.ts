@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkEquipmentStatus } from "@/lib/equipment-communication";
+import * as alertService from "@/lib/alert-service";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,17 +20,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "10");
 
     // Build where clause
-    const where: {
-      type?: string;
-      status?: string;
-      OR?: Array<{
-        name?: { contains: string; mode: "insensitive" };
-        serialNumber?: { contains: string; mode: "insensitive" };
-        nodeId?: { contains: string; mode: "insensitive" };
-      }>;
-    } = {};
-    if (type) where.type = type;
-    if (status) where.status = status;
+    const where: any = {};
+    if (type) where.type = type.toUpperCase();
+    if (status) where.status = status.toUpperCase();
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -166,6 +159,14 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Create alert for admin approval
+    await alertService.alertEquipmentAdded(
+      equipment.id,
+      equipment.name,
+      equipment.type,
+      session.user.id
+    );
 
     return NextResponse.json(equipment, { status: 201 });
   } catch (error) {

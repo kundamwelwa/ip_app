@@ -51,7 +51,7 @@ const quickActions: QuickAction[] = [
     description: "Monitor equipment health",
     icon: Activity,
     href: "/status",
-    color: "text-purple-600"
+    color: "text-blue-600 dark:text-blue-400"
   },
   {
     id: "alerts",

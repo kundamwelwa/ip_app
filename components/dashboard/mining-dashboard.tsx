@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Play,
   Pause,
+  User,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +56,8 @@ interface DashboardEquipment {
   nodeId: string;
   ip: string;
   ipStatus: string;
+  operator?: string;
+  assignedBy?: string;
   // Real-time data
   isOnline: boolean;
   responseTime?: number;
@@ -245,13 +248,13 @@ export function MiningDashboard() {
   const getAlertIcon = (type: string) => {
     switch (type) {
       case "warning":
-        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+        return <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
       case "error":
-        return <XCircle className="h-4 w-4 text-red-600" />;
+        return <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />;
       case "success":
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+        return <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />;
       default:
-        return <Activity className="h-4 w-4 text-blue-600" />;
+        return <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />;
     }
   };
 
@@ -393,7 +396,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 via-purple-600 to-purple-800 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-600 dark:from-blue-400 dark:via-blue-300 dark:to-cyan-400 bg-clip-text text-transparent">
             Welcome to the main Dashboard
           </h1>
           <p className="text-muted-foreground">
@@ -473,7 +476,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
               <p className="card-text-secondary text-xs">
                 {equipmentStatuses.length > 0 ? getOnlineCount() : dashboardData.equipment.filter(eq => eq.status === "ONLINE").length} online
                 {equipmentStatuses.length > 0 && (
-                  <span className="ml-2 text-green-600">
+                  <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
                     (Real-time: {getOnlineCount()}/{equipmentStatuses.length})
                   </span>
                 )}
@@ -504,7 +507,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
               <CheckCircle className="dashboard-card-icon h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="card-number-large text-green-600">{dashboardData.ipSummary.assigned}</div>
+              <div className="card-number-large text-green-700 dark:text-green-400">{dashboardData.ipSummary.assigned}</div>
               <p className="card-text-secondary text-xs">
                 {dashboardData.ipSummary.total > 0 
                   ? `${Math.round((dashboardData.ipSummary.assigned / dashboardData.ipSummary.total) * 100)}% of total`
@@ -521,7 +524,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
               <XCircle className="dashboard-card-icon h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="card-number-large text-blue-600">{dashboardData.ipSummary.available}</div>
+              <div className="card-number-large text-blue-700 dark:text-blue-400">{dashboardData.ipSummary.available}</div>
               <p className="card-text-secondary text-xs">
                 Available for assignment
               </p>
@@ -686,8 +689,8 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
                     <span className="text-sm font-medium">Latency</span>
                     <div className="flex items-center space-x-2">
                       <span className={`text-sm font-medium ${
-                        dashboardData.networkStats.latency <= 20 ? 'text-green-600' :
-                        dashboardData.networkStats.latency <= 50 ? 'text-yellow-600' : 'text-red-600'
+                        dashboardData.networkStats.latency <= 20 ? 'text-green-700 dark:text-green-400' :
+                        dashboardData.networkStats.latency <= 50 ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'
                       }`}>
                         {dashboardData.networkStats.latency}ms
                       </span>
@@ -730,7 +733,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Data Rate</span>
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium text-blue-600">
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
                         {dashboardData.networkStats.totalDataRate || 0} Mbps
                       </span>
                       <Badge variant="outline" className="text-xs">
@@ -772,8 +775,8 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
                     <TableHead>IP Address</TableHead>
                     <TableHead>Real-time Status</TableHead>
                     <TableHead>Location</TableHead>
-                    <TableHead>Signal Strength</TableHead>
-                    <TableHead>Last Seen & Uptime</TableHead>
+                    <TableHead>Operator</TableHead>
+                    <TableHead>IP Assigned By</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -818,39 +821,24 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                            <div
-                              className={`h-2 rounded-full ${
-                                signalStrength >= 80 
-                                  ? 'bg-green-500' 
-                                  : signalStrength >= 60 
-                                    ? 'bg-yellow-500' 
-                                    : signalStrength >= 40
-                                      ? 'bg-orange-500'
-                                      : 'bg-red-500'
-                              }`}
-                              style={{ width: `${signalStrength}%` }}
-                            ></div>
+                        {equipment.operator ? (
+                          <div className="flex items-center space-x-1">
+                            <User className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            <span className="text-sm font-medium">{equipment.operator}</span>
                           </div>
-                          <span className={`text-sm font-medium ${getSignalStrengthColor(signalStrength)}`}>
-                            {signalStrength}%
-                          </span>
-                        </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not assigned</span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">
-                          <div className="font-medium">{lastSeenFormatted}</div>
-                          <div className={`text-xs ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                            {timeAgo}
+                        {equipment.ip !== "Not assigned" && equipment.assignedBy ? (
+                          <div className="text-sm">
+                            <div className="font-medium">{equipment.assignedBy}</div>
+                            <div className="text-xs text-muted-foreground">IP Assignment</div>
                           </div>
-                          <div className="flex items-center space-x-1 mt-1">
-                            <span className="text-xs text-muted-foreground">Uptime:</span>
-                            <span className={`text-xs font-medium ${getUptimeColor(uptime)}`}>
-                              {uptime}%
-                            </span>
-                          </div>
-                        </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                     </TableRow>
                     );

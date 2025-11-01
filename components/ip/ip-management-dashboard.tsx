@@ -1,6 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { 
+  Loader2, 
+  RefreshCw, 
+  Save, 
+  Lock, 
+  FileText, 
+  Network, 
+  Plus, 
+  Search, 
+  Edit, 
+  Trash2, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle, 
+  MapPin, 
+  Clock, 
+  Activity,
+  Wifi,
+  WifiOff,
+  Shield,
+  Server,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  Filter,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -32,43 +58,43 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Search, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  AlertTriangle, 
-  CheckCircle, 
-  XCircle,
-  Wifi,
-  WifiOff,
-  Activity,
-  Shield,
-  Clock,
-  MapPin,
-  Server,
-  Network
-} from "lucide-react";
+import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
 
 // Types
 interface IPAddress {
   id: string;
   address: string;
   subnet: string;
-  gateway: string;
-  dns: string[];
-  status: "available" | "assigned" | "reserved" | "conflict";
+  gateway: string | null;
+  dns: string | null;
+  status: "AVAILABLE" | "ASSIGNED" | "RESERVED" | "OFFLINE";
+  isReserved?: boolean;
   assignedTo?: string;
   equipmentId?: string;
   equipmentName?: string;
   equipmentType?: string;
   location?: string;
   assignedBy?: string;
-  assignedAt?: Date;
-  lastSeen?: Date;
-  notes?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  assignedAt?: string | Date;
+  lastSeen?: string | Date;
+  notes?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  assignments?: Array<{
+    id: string;
+    equipment?: {
+      id: string;
+      name: string;
+      type: string;
+      location: string | null;
+    };
+    user?: {
+      firstName: string;
+      lastName: string;
+    };
+    assignedAt: string;
+    isActive: boolean;
+  }>;
 }
 
 interface IPAssignment {
@@ -117,132 +143,197 @@ export function IPManagementDashboard() {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [editingIP, setEditingIP] = useState<IPAddress | null>(null);
   const [assigningIP, setAssigningIP] = useState<IPAddress | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [equipmentList, setEquipmentList] = useState<Array<{ id: string; name: string; type: string }>>([]);
 
-  // Mock data - In a real application, this would come from API calls
-  const [ipAddresses, setIPAddresses] = useState<IPAddress[]>([
-    {
-      id: "IP001",
-      address: "192.168.1.10",
-      subnet: "192.168.1.0/24",
-      gateway: "192.168.1.1",
-      dns: ["8.8.8.8", "8.8.4.4"],
-      status: "assigned",
-      assignedTo: "Truck-001",
-      equipmentId: "EQ001",
-      equipmentName: "Mining Truck 001",
-      equipmentType: "Truck",
-      location: "Pit A",
-      assignedBy: "Admin",
-      assignedAt: new Date("2024-01-15"),
-      lastSeen: new Date("2024-01-20"),
-      notes: "Primary haul truck",
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-20"),
-    },
-    {
-      id: "IP002",
-      address: "192.168.1.11",
-      subnet: "192.168.1.0/24",
-      gateway: "192.168.1.1",
-      dns: ["8.8.8.8", "8.8.4.4"],
-      status: "available",
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-01"),
-    },
-    {
-      id: "IP003",
-      address: "192.168.1.12",
-      subnet: "192.168.1.0/24",
-      gateway: "192.168.1.1",
-      dns: ["8.8.8.8", "8.8.4.4"],
-      status: "conflict",
-      assignedTo: "Shovel-002",
-      equipmentId: "EQ002",
-      equipmentName: "Excavator 002",
-      equipmentType: "Excavator",
-      location: "Pit B",
-      assignedBy: "Admin",
-      assignedAt: new Date("2024-01-18"),
-      lastSeen: new Date("2024-01-19"),
-      notes: "IP conflict detected",
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-19"),
-    },
-    {
-      id: "IP004",
-      address: "192.168.1.13",
-      subnet: "192.168.1.0/24",
-      gateway: "192.168.1.1",
-      dns: ["8.8.8.8", "8.8.4.4"],
-      status: "reserved",
-      notes: "Reserved for new equipment",
-      createdAt: new Date("2024-01-01"),
-      updatedAt: new Date("2024-01-01"),
-    },
-  ]);
+  // Real data from API
+  const [ipAddresses, setIPAddresses] = useState<IPAddress[]>([]);
 
-  const [assignments, setAssignments] = useState<IPAssignment[]>([
-    {
-      id: "ASG001",
-      ipAddress: "192.168.1.10",
-      equipmentId: "EQ001",
-      equipmentName: "Mining Truck 001",
-      equipmentType: "Truck",
-      location: "Pit A",
-      assignedBy: "Admin",
-      assignedAt: new Date("2024-01-15"),
-      lastSeen: new Date("2024-01-20"),
+  const [assignments, setAssignments] = useState<IPAssignment[]>([]);
+  
+  // Fetch IP addresses from API
+  const fetchIPAddresses = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/ip-addresses?limit=1000");
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch IP addresses");
+      }
+      
+      const data = await response.json();
+      
+      // Transform API data to match component format
+      const transformedIPs: IPAddress[] = data.ipAddresses.map((ip: any) => ({
+        id: ip.id,
+        address: ip.address,
+        subnet: ip.subnet,
+        gateway: ip.gateway || "",
+        dns: ip.dns || "",
+        status: ip.status as "AVAILABLE" | "ASSIGNED" | "RESERVED" | "OFFLINE",
+        isReserved: ip.isReserved || false,
+        notes: ip.notes || null,
+        createdAt: new Date(ip.createdAt),
+        updatedAt: new Date(ip.updatedAt),
+        assignments: ip.assignments || [],
+        // Get assignment info if exists
+        assignedTo: ip.assignments?.[0]?.equipment?.name,
+        equipmentId: ip.assignments?.[0]?.equipment?.id,
+        equipmentName: ip.assignments?.[0]?.equipment?.name,
+        equipmentType: ip.assignments?.[0]?.equipment?.type,
+        location: ip.assignments?.[0]?.equipment?.location || "",
+        assignedBy: ip.assignments?.[0]?.user 
+          ? `${ip.assignments[0].user.firstName} ${ip.assignments[0].user.lastName}` 
+          : undefined,
+        assignedAt: ip.assignments?.[0]?.assignedAt 
+          ? new Date(ip.assignments[0].assignedAt) 
+          : undefined,
+      }));
+      
+      setIPAddresses(transformedIPs);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+      console.error("Error fetching IP addresses:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch equipment list for assignment
+  const fetchEquipment = async () => {
+    try {
+      const response = await fetch("/api/equipment?limit=1000");
+      if (response.ok) {
+        const data = await response.json();
+        setEquipmentList(data.equipment.map((eq: any) => ({
+          id: eq.id,
+          name: eq.name,
+          type: eq.type,
+        })));
+      }
+    } catch (err) {
+      console.error("Error fetching equipment:", err);
+    }
+  };
+
+  // Fetch conflicts
+  const fetchConflicts = async () => {
+    try {
+      const response = await fetch("/api/ip-addresses/conflicts");
+      if (response.ok) {
+        const data = await response.json();
+        // Transform conflicts data
+        const transformedConflicts: IPConflict[] = data.conflicts.map((conflict: any) => ({
+          id: conflict.ipAddress,
+          ipAddress: conflict.ipAddress,
+          conflictingEquipment: conflict.assignments.map((a: any) => a.equipmentName),
+          detectedAt: new Date(),
+          severity: conflict.conflictCount > 2 ? "high" : "medium" as "low" | "medium" | "high" | "critical",
+          status: "active" as "active" | "resolved",
+        }));
+        setConflicts(transformedConflicts);
+      }
+    } catch (err) {
+      console.error("Error fetching conflicts:", err);
+    }
+  };
+
+  // Fetch audit logs
+  const fetchAuditLogs = async () => {
+    try {
+      const response = await fetch("/api/dashboard");
+      if (response.ok) {
+        const data = await response.json();
+        // Transform recent activity to audit logs
+        const transformedLogs: IPAuditLog[] = data.recentActivity
+          .filter((activity: any) => 
+            activity.action.includes("IP") || 
+            activity.entity?.includes("192.168") ||
+            activity.action.includes("ASSIGNMENT")
+          )
+          .map((activity: any) => ({
+            id: activity.id,
+            ipAddress: activity.entity || "Unknown" || undefined,
+            action: activity.action.includes("ASSIGN") ? "assigned" :
+                   activity.action.includes("UNASSIGN") ? "unassigned" :
+                   activity.action.includes("CREATED") ? "modified" :
+                   activity.action.includes("CONFLICT") ? "conflict_detected" :
+                   "modified" as IPAuditLog["action"],
+            performedBy: activity.user || "System",
+            performedAt: new Date(activity.time),
+            details: activity.action,
+            equipmentName: activity.entity,
+          }));
+        setAuditLogs(transformedLogs);
+      }
+    } catch (err) {
+      console.error("Error fetching audit logs:", err);
+    }
+  };
+
+  // Fetch assignments from IP assignments
+  const fetchAssignments = async () => {
+    try {
+      // We'll derive assignments from IP addresses with active assignments
+      const assignmentsFromIPs: IPAssignment[] = [];
+      ipAddresses.forEach((ip) => {
+        if (ip.status === "ASSIGNED" && ip.assignments && ip.assignments.length > 0) {
+          const assignment = ip.assignments[0];
+          if (assignment.isActive && assignment.equipment) {
+            assignmentsFromIPs.push({
+              id: assignment.id,
+              ipAddress: ip.address,
+              equipmentId: assignment.equipment.id,
+              equipmentName: assignment.equipment.name,
+              equipmentType: assignment.equipment.type,
+              location: assignment.equipment.location || "",
+              assignedBy: assignment.user 
+                ? `${assignment.user.firstName} ${assignment.user.lastName}` 
+                : "System",
+              assignedAt: new Date(assignment.assignedAt),
+              lastSeen: ip.lastSeen ? new Date(ip.lastSeen) : new Date(),
       status: "active",
-      notes: "Primary haul truck",
-    },
-    {
-      id: "ASG002",
-      ipAddress: "192.168.1.12",
-      equipmentId: "EQ002",
-      equipmentName: "Excavator 002",
-      equipmentType: "Excavator",
-      location: "Pit B",
-      assignedBy: "Admin",
-      assignedAt: new Date("2024-01-18"),
-      lastSeen: new Date("2024-01-19"),
-      status: "conflict",
-      notes: "IP conflict detected",
-    },
-  ]);
+              notes: undefined,
+            });
+          }
+        }
+      });
+      setAssignments(assignmentsFromIPs);
+    } catch (err) {
+      console.error("Error processing assignments:", err);
+    }
+  };
 
-  const [conflicts, setConflicts] = useState<IPConflict[]>([
-    {
-      id: "CFL001",
-      ipAddress: "192.168.1.12",
-      conflictingEquipment: ["Excavator 002", "Unknown Device"],
-      detectedAt: new Date("2024-01-19"),
-      severity: "high",
-      status: "active",
-    },
-  ]);
+  // Initial data fetch
+  useEffect(() => {
+    fetchIPAddresses();
+    fetchEquipment();
+    fetchConflicts();
+  }, []);
 
-  const [auditLogs, setAuditLogs] = useState<IPAuditLog[]>([
-    {
-      id: "AUD001",
-      ipAddress: "192.168.1.10",
-      action: "assigned",
-      equipmentId: "EQ001",
-      equipmentName: "Mining Truck 001",
-      performedBy: "Admin",
-      performedAt: new Date("2024-01-15"),
-      details: "IP address assigned to Mining Truck 001",
-    },
-    {
-      id: "AUD002",
-      ipAddress: "192.168.1.12",
-      action: "conflict_detected",
-      equipmentId: "EQ002",
-      equipmentName: "Excavator 002",
-      performedBy: "System",
-      performedAt: new Date("2024-01-19"),
-      details: "IP conflict detected with unknown device",
-    },
-  ]);
+  // Update assignments when IP addresses change
+  useEffect(() => {
+    if (ipAddresses.length > 0) {
+      fetchAssignments();
+      fetchAuditLogs();
+    }
+  }, [ipAddresses]);
+
+  // Real-time refresh interval (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchIPAddresses();
+      fetchConflicts();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const [conflicts, setConflicts] = useState<IPConflict[]>([]);
+  const [auditLogs, setAuditLogs] = useState<IPAuditLog[]>([]);
 
   const [formData, setFormData] = useState({
     address: "",
@@ -262,10 +353,10 @@ export function IPManagementDashboard() {
 
   // Statistics
   const totalIPs = ipAddresses.length;
-  const assignedIPs = ipAddresses.filter(ip => ip.status === "assigned").length;
-  const availableIPs = ipAddresses.filter(ip => ip.status === "available").length;
-  const conflictIPs = ipAddresses.filter(ip => ip.status === "conflict").length;
-  const reservedIPs = ipAddresses.filter(ip => ip.status === "reserved").length;
+  const assignedIPs = ipAddresses.filter(ip => ip.status === "ASSIGNED").length;
+  const availableIPs = ipAddresses.filter(ip => ip.status === "AVAILABLE").length;
+  const conflictIPs = conflicts.filter(c => c.status === "active").length;
+  const reservedIPs = ipAddresses.filter(ip => ip.status === "RESERVED" || ip.isReserved).length;
 
   const assignmentRate = totalIPs > 0 ? (assignedIPs / totalIPs) * 100 : 0;
   const conflictRate = totalIPs > 0 ? (conflictIPs / totalIPs) * 100 : 0;
@@ -275,20 +366,22 @@ export function IPManagementDashboard() {
     const matchesSearch = ip.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          ip.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          ip.equipmentName?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === "all" || ip.status === filterStatus;
+    const normalizedStatus = ip.status.toLowerCase();
+    const normalizedFilter = filterStatus.toLowerCase();
+    const matchesStatus = filterStatus === "all" || normalizedStatus === normalizedFilter;
     
     return matchesSearch && matchesStatus;
   });
 
   const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "assigned":
+    switch (status.toUpperCase()) {
+      case "ASSIGNED":
         return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case "available":
+      case "AVAILABLE":
         return <Wifi className="h-4 w-4 text-blue-500" />;
-      case "conflict":
-        return <AlertTriangle className="h-4 w-4 text-red-500" />;
-      case "reserved":
+      case "OFFLINE":
+        return <WifiOff className="h-4 w-4 text-red-500" />;
+      case "RESERVED":
         return <Shield className="h-4 w-4 text-yellow-500" />;
       default:
         return <WifiOff className="h-4 w-4 text-gray-500" />;
@@ -296,36 +389,57 @@ export function IPManagementDashboard() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants = {
-      assigned: "default",
-      available: "secondary",
-      conflict: "destructive",
-      reserved: "outline",
-    } as const;
+    const normalizedStatus = status.toUpperCase();
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      ASSIGNED: "default",
+      AVAILABLE: "secondary",
+      OFFLINE: "destructive",
+      RESERVED: "outline",
+    };
 
     return (
-      <Badge variant={variants[status as keyof typeof variants] || "outline"}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <Badge variant={variants[normalizedStatus] || "outline"}>
+        {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
       </Badge>
     );
   };
 
-  const handleAddIP = () => {
-    const newIP: IPAddress = {
-      id: `IP${String(ipAddresses.length + 1).padStart(3, '0')}`,
+  const handleAddIP = async () => {
+    if (!formData.address || !formData.subnet) {
+      setError("IP address and subnet are required");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      const response = await fetch("/api/ip-addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
       address: formData.address,
       subnet: formData.subnet,
-      gateway: formData.gateway,
-      dns: formData.dns.split(',').map(d => d.trim()),
-      status: "available",
-      notes: formData.notes,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+          gateway: formData.gateway || null,
+          dns: formData.dns ? formData.dns.split(',').map((d: string) => d.trim()).join(',') : null,
+          notes: formData.notes || null,
+        }),
+      });
 
-    setIPAddresses([...ipAddresses, newIP]);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to add IP address");
+      }
+
+      await fetchIPAddresses();
     setIsAddDialogOpen(false);
     resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add IP address");
+      console.error("Error adding IP address:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEditIP = (ip: IPAddress) => {
@@ -333,114 +447,141 @@ export function IPManagementDashboard() {
     setFormData({
       address: ip.address,
       subnet: ip.subnet,
-      gateway: ip.gateway,
-      dns: ip.dns.join(', '),
+      gateway: ip.gateway || "",
+      dns: typeof ip.dns === "string" ? ip.dns : (ip.dns && typeof ip.dns !== "string" ? String(ip.dns) : ""),
       notes: ip.notes || "",
     });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateIP = () => {
+  const handleUpdateIP = async () => {
     if (!editingIP) return;
 
-    const updatedIPs = ipAddresses.map(ip => 
-      ip.id === editingIP.id 
-        ? { 
-            ...ip, 
-            ...formData, 
-            dns: formData.dns.split(',').map(d => d.trim()),
-            updatedAt: new Date() 
-          }
-        : ip
-    );
+    try {
+      setSubmitting(true);
+      setError(null);
 
-    setIPAddresses(updatedIPs);
+      const response = await fetch(`/api/ip-addresses/${editingIP.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subnet: formData.subnet,
+          gateway: formData.gateway || null,
+          dns: formData.dns ? formData.dns.split(',').map((d: string) => d.trim()).join(',') : null,
+          notes: formData.notes || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update IP address");
+      }
+
+      await fetchIPAddresses();
     setIsEditDialogOpen(false);
     setEditingIP(null);
     resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update IP address");
+      console.error("Error updating IP address:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleAssignIP = (ip: IPAddress) => {
     setAssigningIP(ip);
-    setAssignmentFormData({
-      equipmentId: "",
-      equipmentName: "",
-      equipmentType: "",
-      location: "",
-      notes: "",
-    });
     setIsAssignDialogOpen(true);
   };
 
-  const handleConfirmAssignment = () => {
+  const handleConfirmAssignment = async (equipmentId: string) => {
     if (!assigningIP) return;
 
-    const newAssignment: IPAssignment = {
-      id: `ASG${String(assignments.length + 1).padStart(3, '0')}`,
-      ipAddress: assigningIP.address,
-      equipmentId: assignmentFormData.equipmentId,
-      equipmentName: assignmentFormData.equipmentName,
-      equipmentType: assignmentFormData.equipmentType as "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor",
-      location: assignmentFormData.location,
-      assignedBy: "Admin",
-      assignedAt: new Date(),
-      lastSeen: new Date(),
-      status: "active",
-      notes: assignmentFormData.notes,
-    };
+    try {
+      setSubmitting(true);
+      setError(null);
 
-    const updatedIPs = ipAddresses.map(ip => 
-      ip.id === assigningIP.id 
-        ? { 
-            ...ip, 
-            status: "assigned" as const,
-            assignedTo: assignmentFormData.equipmentName,
-            equipmentId: assignmentFormData.equipmentId,
-            equipmentName: assignmentFormData.equipmentName,
-            equipmentType: assignmentFormData.equipmentType,
-            location: assignmentFormData.location,
-            assignedBy: "Admin",
-            assignedAt: new Date(),
-            lastSeen: new Date(),
-            notes: assignmentFormData.notes,
-            updatedAt: new Date()
-          }
-        : ip
-    );
+      const response = await fetch("/api/ip-assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ipAddressId: assigningIP.id,
+          equipmentId: equipmentId,
+          notes: assignmentFormData.notes || null,
+        }),
+      });
 
-    setIPAddresses(updatedIPs);
-    setAssignments([...assignments, newAssignment]);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to assign IP address");
+      }
+
+      await fetchIPAddresses();
     setIsAssignDialogOpen(false);
     setAssigningIP(null);
     resetAssignmentForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign IP address");
+      console.error("Error assigning IP address:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleUnassignIP = (ip: IPAddress) => {
-    const updatedIPs = ipAddresses.map(item => 
-      item.id === ip.id 
-        ? { 
-            ...item, 
-            status: "available" as const,
-            assignedTo: undefined,
-            equipmentId: undefined,
-            equipmentName: undefined,
-            equipmentType: undefined,
-            location: undefined,
-            assignedBy: undefined,
-            assignedAt: undefined,
-            lastSeen: undefined,
-            updatedAt: new Date()
-          }
-        : item
-    );
+  const handleUnassignIP = async (ip: IPAddress) => {
+    if (!ip.assignments || ip.assignments.length === 0) return;
 
-    setIPAddresses(updatedIPs);
-    setAssignments(assignments.filter(assignment => assignment.ipAddress !== ip.address));
+    const activeAssignment = ip.assignments.find(a => a.isActive);
+    if (!activeAssignment) return;
+
+    if (!confirm("Are you sure you want to unassign this IP address?")) return;
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      const response = await fetch(`/api/ip-assignments?ipAddressId=${ip.id}&equipmentId=${activeAssignment.equipment?.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to unassign IP address");
+      }
+
+      await fetchIPAddresses();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to unassign IP address");
+      console.error("Error unassigning IP address:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteIP = (id: string) => {
-    if (confirm("Are you sure you want to delete this IP address?")) {
-      setIPAddresses(ipAddresses.filter(ip => ip.id !== id));
+  const handleDeleteIP = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this IP address? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      const response = await fetch(`/api/ip-addresses/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete IP address");
+      }
+
+      await fetchIPAddresses();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete IP address");
+      console.error("Error deleting IP address:", err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -474,11 +615,37 @@ export function IPManagementDashboard() {
             Manage IP addresses, assignments, and network conflicts
           </p>
         </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              fetchIPAddresses();
+              fetchConflicts();
+              fetchAuditLogs();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
         <Button onClick={() => setIsAddDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Add IP Address
         </Button>
+        </div>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Statistics Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -639,7 +806,7 @@ export function IPManagementDashboard() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="available">Available</SelectItem>
                 <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="conflict">Conflict</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
                 <SelectItem value="reserved">Reserved</SelectItem>
               </SelectContent>
             </Select>
@@ -653,6 +820,11 @@ export function IPManagementDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -698,7 +870,7 @@ export function IPManagementDashboard() {
                         {ip.lastSeen ? (
                           <div className="flex items-center space-x-1">
                             <Clock className="h-3 w-3" />
-                            <span>{ip.lastSeen.toLocaleDateString()}</span>
+                            <span>{ip.lastSeen instanceof Date ? ip.lastSeen.toLocaleDateString() : new Date(ip.lastSeen).toLocaleDateString()}</span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">Never</span>
@@ -706,20 +878,22 @@ export function IPManagementDashboard() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          {ip.status === "available" && (
+                          {(ip.status === "AVAILABLE" || ip.status === "RESERVED") && (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleAssignIP(ip)}
+                              disabled={submitting}
                             >
                               Assign
                             </Button>
                           )}
-                          {ip.status === "assigned" && (
+                          {ip.status === "ASSIGNED" && (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleUnassignIP(ip)}
+                              disabled={submitting}
                             >
                               Unassign
                             </Button>
@@ -744,6 +918,7 @@ export function IPManagementDashboard() {
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -956,222 +1131,300 @@ export function IPManagementDashboard() {
 
       {/* Add IP Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add IP Address</DialogTitle>
-            <DialogDescription>
-              Add a new IP address to the network pool
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col">
+          <DialogHeader className="space-y-3 flex-shrink-0">
+            <DialogTitle className="text-2xl font-bold">Add IP Address</DialogTitle>
+            <DialogDescription className="text-base">
+              Add a new IP address to the network pool with its configuration details
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="address">IP Address</Label>
+          <div className="space-y-6 py-6 overflow-y-auto flex-1 pr-2">
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Network Information Section */}
+            <div className="space-y-5">
+              <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                <Network className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Network Information</h3>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label htmlFor="address" className="text-sm font-semibold text-foreground flex items-center space-x-1">
+                    <span>IP Address</span>
+                    <span className="text-red-500">*</span>
+                  </Label>
                 <Input
                   id="address"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  placeholder="192.168.1.10"
+                    placeholder="e.g., 192.168.1.10"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">The IPv4 address for this device</p>
               </div>
-              <div>
-                <Label htmlFor="subnet">Subnet</Label>
+                <div className="space-y-2.5">
+                  <Label htmlFor="subnet" className="text-sm font-semibold text-foreground flex items-center space-x-1">
+                    <span>Subnet Mask</span>
+                    <span className="text-red-500">*</span>
+                  </Label>
                 <Input
                   id="subnet"
                   value={formData.subnet}
                   onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
-                  placeholder="192.168.1.0/24"
+                    placeholder="e.g., 192.168.1.0/24"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Network subnet in CIDR notation</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="gateway">Gateway</Label>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label htmlFor="gateway" className="text-sm font-semibold text-foreground flex items-center space-x-1">
+                    <span>Gateway</span>
+                    <span className="text-red-500">*</span>
+                  </Label>
                 <Input
                   id="gateway"
                   value={formData.gateway}
                   onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
-                  placeholder="192.168.1.1"
+                    placeholder="e.g., 192.168.1.1"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Default gateway address</p>
               </div>
-              <div>
-                <Label htmlFor="dns">DNS Servers</Label>
+                <div className="space-y-2.5">
+                  <Label htmlFor="dns" className="text-sm font-semibold text-foreground">
+                    DNS Servers
+                  </Label>
                 <Input
                   id="dns"
                   value={formData.dns}
                   onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
-                  placeholder="8.8.8.8, 8.8.4.4"
+                    placeholder="e.g., 8.8.8.8, 8.8.4.4"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Comma-separated DNS server addresses</p>
               </div>
             </div>
-            <div>
-              <Label htmlFor="notes">Notes</Label>
+            </div>
+
+            {/* Additional Information Section */}
+            <div className="space-y-5">
+              <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Additional Information</h3>
+              </div>
+              
+              <div className="space-y-2.5">
+                <Label htmlFor="notes" className="text-sm font-semibold text-foreground">
+                  Notes (Optional)
+                </Label>
               <Textarea
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Additional notes about this IP address"
+                  placeholder="Add any additional notes or comments about this IP address..."
+                  className="min-h-[100px] bg-background border-2 focus:border-primary resize-none"
               />
+                <p className="text-xs text-muted-foreground">Any relevant information about this IP address</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+          </div>
+          <DialogFooter className="gap-2 pt-4 border-t border-border flex-shrink-0">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsAddDialogOpen(false);
+                resetForm();
+                setError(null);
+              }}
+              disabled={submitting}
+              className="min-w-[100px]"
+            >
               Cancel
             </Button>
-            <Button onClick={handleAddIP}>Add IP Address</Button>
+            <Button onClick={handleAddIP} disabled={submitting} className="min-w-[140px]">
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add IP Address
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit IP Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit IP Address</DialogTitle>
-            <DialogDescription>
-              Update IP address configuration
+        <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col">
+          <DialogHeader className="space-y-3 flex-shrink-0">
+            <DialogTitle className="text-2xl font-bold">Edit IP Address</DialogTitle>
+            <DialogDescription className="text-base">
+              Update IP address configuration and settings
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-address">IP Address</Label>
+          <div className="space-y-6 py-6 overflow-y-auto flex-1 pr-2">
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Network Information Section */}
+            <div className="space-y-5">
+              <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                <Network className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Network Information</h3>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label htmlFor="edit-address" className="text-sm font-semibold text-foreground">
+                    IP Address
+                  </Label>
                 <Input
                   id="edit-address"
                   value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    disabled
+                    className="h-11 bg-muted/50 border-2 cursor-not-allowed"
                   placeholder="192.168.1.10"
                 />
+                  <p className="text-xs text-amber-600 dark:text-amber-500 font-medium flex items-center space-x-1">
+                    <Lock className="h-3 w-3" />
+                    <span>IP address cannot be modified</span>
+                  </p>
               </div>
-              <div>
-                <Label htmlFor="edit-subnet">Subnet</Label>
+                <div className="space-y-2.5">
+                  <Label htmlFor="edit-subnet" className="text-sm font-semibold text-foreground flex items-center space-x-1">
+                    <span>Subnet Mask</span>
+                    <span className="text-red-500">*</span>
+                  </Label>
                 <Input
                   id="edit-subnet"
                   value={formData.subnet}
                   onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
-                  placeholder="192.168.1.0/24"
+                    placeholder="e.g., 192.168.1.0/24"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Network subnet in CIDR notation</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-gateway">Gateway</Label>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2.5">
+                  <Label htmlFor="edit-gateway" className="text-sm font-semibold text-foreground flex items-center space-x-1">
+                    <span>Gateway</span>
+                    <span className="text-red-500">*</span>
+                  </Label>
                 <Input
                   id="edit-gateway"
                   value={formData.gateway}
                   onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
-                  placeholder="192.168.1.1"
+                    placeholder="e.g., 192.168.1.1"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Default gateway address</p>
               </div>
-              <div>
-                <Label htmlFor="edit-dns">DNS Servers</Label>
+                <div className="space-y-2.5">
+                  <Label htmlFor="edit-dns" className="text-sm font-semibold text-foreground">
+                    DNS Servers
+                  </Label>
                 <Input
                   id="edit-dns"
                   value={formData.dns}
                   onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
-                  placeholder="8.8.8.8, 8.8.4.4"
+                    placeholder="e.g., 8.8.8.8, 8.8.4.4"
+                    className="h-11 bg-background border-2 focus:border-primary"
                 />
+                  <p className="text-xs text-muted-foreground mt-1">Comma-separated DNS server addresses</p>
               </div>
             </div>
-            <div>
-              <Label htmlFor="edit-notes">Notes</Label>
+            </div>
+
+            {/* Additional Information Section */}
+            <div className="space-y-5">
+              <div className="flex items-center space-x-2 pb-2 border-b border-border">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Additional Information</h3>
+              </div>
+              
+              <div className="space-y-2.5">
+                <Label htmlFor="edit-notes" className="text-sm font-semibold text-foreground">
+                  Notes (Optional)
+                </Label>
               <Textarea
                 id="edit-notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Additional notes about this IP address"
+                  placeholder="Add any additional notes or comments about this IP address..."
+                  className="min-h-[100px] bg-background border-2 focus:border-primary resize-none"
               />
+                <p className="text-xs text-muted-foreground">Any relevant information about this IP address</p>
+            </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+          <DialogFooter className="gap-2 pt-4 border-t border-border flex-shrink-0">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                setEditingIP(null);
+                resetForm();
+                setError(null);
+              }}
+              disabled={submitting}
+              className="min-w-[100px]"
+            >
               Cancel
             </Button>
-            <Button onClick={handleUpdateIP}>Update IP Address</Button>
+            <Button onClick={handleUpdateIP} disabled={submitting} className="min-w-[140px]">
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Update IP
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Assign IP Dialog */}
-      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign IP Address</DialogTitle>
-            <DialogDescription>
-              Assign {assigningIP?.address} to equipment
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="equipment-id">Equipment ID</Label>
-                <Input
-                  id="equipment-id"
-                  value={assignmentFormData.equipmentId}
-                  onChange={(e) => setAssignmentFormData({ ...assignmentFormData, equipmentId: e.target.value })}
-                  placeholder="EQ001"
-                />
-              </div>
-              <div>
-                <Label htmlFor="equipment-name">Equipment Name</Label>
-                <Input
-                  id="equipment-name"
-                  value={assignmentFormData.equipmentName}
-                  onChange={(e) => setAssignmentFormData({ ...assignmentFormData, equipmentName: e.target.value })}
-                  placeholder="Mining Truck 001"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="equipment-type">Equipment Type</Label>
-                <Select
-                  value={assignmentFormData.equipmentType}
-                  onValueChange={(value) => setAssignmentFormData({ ...assignmentFormData, equipmentType: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Truck">Truck</SelectItem>
-                    <SelectItem value="Excavator">Excavator</SelectItem>
-                    <SelectItem value="Drill">Drill</SelectItem>
-                    <SelectItem value="Loader">Loader</SelectItem>
-                    <SelectItem value="Dozer">Dozer</SelectItem>
-                    <SelectItem value="Shovel">Shovel</SelectItem>
-                    <SelectItem value="Crusher">Crusher</SelectItem>
-                    <SelectItem value="Conveyor">Conveyor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={assignmentFormData.location}
-                  onChange={(e) => setAssignmentFormData({ ...assignmentFormData, location: e.target.value })}
-                  placeholder="Pit A"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="assignment-notes">Notes</Label>
-              <Textarea
-                id="assignment-notes"
-                value={assignmentFormData.notes}
-                onChange={(e) => setAssignmentFormData({ ...assignmentFormData, notes: e.target.value })}
-                placeholder="Additional notes about this assignment"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmAssignment}>Assign IP Address</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EquipmentSelectionDialog
+        isOpen={isAssignDialogOpen}
+        onClose={() => {
+          setIsAssignDialogOpen(false);
+          setAssigningIP(null);
+          resetAssignmentForm();
+        }}
+        ipAddress={assigningIP?.address || ""}
+        onConfirm={async (equipmentId: string, equipmentName: string) => {
+          await handleConfirmAssignment(equipmentId);
+        }}
+      />
     </div>
   );
 }

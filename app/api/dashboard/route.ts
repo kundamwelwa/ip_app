@@ -30,7 +30,16 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       // Get equipment data with IP assignments
       prisma.equipment.findMany({
-        include: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          status: true,
+          location: true,
+          operator: true,
+          lastSeen: true,
+          meshStrength: true,
+          nodeId: true,
           ipAssignments: {
             where: { isActive: true },
             include: {
@@ -39,6 +48,13 @@ export async function GET(request: NextRequest) {
                   id: true,
                   address: true,
                   status: true,
+                },
+              },
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
                 },
               },
             },
@@ -145,20 +161,27 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Format equipment data for dashboard
-    const formattedEquipment = equipmentData.map((equipment) => ({
-      id: equipment.id,
-      name: equipment.name,
-      type: equipment.type,
-      status: equipment.status,
-      location: equipment.location || "Unknown",
-      lastSeen: equipment.lastSeen
-        ? new Date(equipment.lastSeen).toLocaleString()
-        : "Never",
-      meshStrength: equipment.meshStrength || 0,
-      nodeId: equipment.nodeId,
-      ip: equipment.ipAssignments[0]?.ipAddress?.address || "Not assigned",
-      ipStatus: equipment.ipAssignments[0]?.ipAddress?.status || "AVAILABLE",
-    }));
+    const formattedEquipment = equipmentData.map((equipment) => {
+      const activeAssignment = equipment.ipAssignments[0];
+      return {
+        id: equipment.id,
+        name: equipment.name,
+        type: equipment.type,
+        status: equipment.status,
+        location: equipment.location || "Unknown",
+        lastSeen: equipment.lastSeen
+          ? new Date(equipment.lastSeen).toLocaleString()
+          : "Never",
+        meshStrength: equipment.meshStrength || 0,
+        nodeId: equipment.nodeId,
+        ip: activeAssignment?.ipAddress?.address || "Not assigned",
+        ipStatus: activeAssignment?.ipAddress?.status || "AVAILABLE",
+        operator: equipment.operator || null,
+        assignedBy: activeAssignment?.user
+          ? `${activeAssignment.user.firstName} ${activeAssignment.user.lastName}`
+          : null,
+      };
+    });
 
     // Format alerts for dashboard
     const formattedAlerts = recentAlerts.map((alert) => ({

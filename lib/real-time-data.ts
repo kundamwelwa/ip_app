@@ -15,6 +15,8 @@ export interface RealTimeEquipmentData {
   nodeId: string | null;
   ip: string;
   ipStatus: string;
+  operator?: string;
+  assignedBy?: string;
   // Real-time data
   isOnline: boolean;
   responseTime?: number;
@@ -62,6 +64,8 @@ export function processEquipmentData(
     nodeId: string | null;
     ip: string;
     ipStatus: string;
+    operator?: string | null;
+    assignedBy?: string | null;
   }[],
   realTimeStatuses: EquipmentCommunicationData[]
 ): RealTimeEquipmentData[] {
@@ -83,13 +87,15 @@ export function processEquipmentData(
       id: eq.id,
       name: eq.name,
       type: eq.type,
-      status: eq.status,
+      status: eq.status as 'ONLINE' | 'OFFLINE' | 'MAINTENANCE' | 'UNKNOWN',
       location: eq.location || 'Unknown',
       lastSeen,
       meshStrength: eq.meshStrength || 0,
       nodeId: eq.nodeId,
       ip: eq.ip || 'Not assigned',
       ipStatus: eq.ipStatus || 'AVAILABLE',
+      operator: eq.operator || undefined,
+      assignedBy: eq.assignedBy || undefined,
       // Real-time data
       isOnline,
       responseTime,

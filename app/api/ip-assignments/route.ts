@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import * as alertService from "@/lib/alert-service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -134,6 +135,15 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Create alert for IP assignment
+    await alertService.alertIPAssigned(
+      ipAddressRecord.id,
+      ipAddress,
+      equipmentId,
+      equipment.name,
+      session.user?.id || "system"
+    );
+
     return NextResponse.json({
       success: true,
       assignment: {
@@ -220,12 +230,23 @@ export async function DELETE(request: NextRequest) {
         equipmentId: assignment.equipmentId,
         details: {
           ipAddress: assignment.ipAddress.address,
-          equipmentName: assignment.equipment.name,
-          equipmentType: assignment.equipment.type,
+          equipmentName: assignment.equipment?.name || "Unknown",
+          equipmentType: assignment.equipment?.type || "Unknown",
           releasedAt: new Date()
         }
       }
     });
+
+    // Create alert for IP unassignment
+    if (assignment.equipment && assignment.equipmentId) {
+      await alertService.alertIPUnassigned(
+        assignment.ipAddressId,
+        assignment.ipAddress.address,
+        assignment.equipmentId,
+        assignment.equipment.name,
+        session.user?.id || "system"
+      );
+    }
 
     return NextResponse.json({
       success: true,

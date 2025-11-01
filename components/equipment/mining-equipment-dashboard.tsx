@@ -66,6 +66,7 @@ import { MiningEquipment, EquipmentFormData } from "@/types/equipment";
 import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
 import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
 import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
+import { isEquipmentFeatureEnabled } from "@/lib/feature-flags";
 
 // Equipment types and form data are now imported from types/equipment.ts
 
@@ -460,56 +461,64 @@ export function MiningEquipmentDashboard() {
         <div className="flex flex-wrap gap-2">
           {/* Real-time monitoring controls */}
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleRefreshAll}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-            </Button>
-            <Button 
-              variant={monitoringStatus.isRunning ? "destructive" : "default"}
-              size="sm"
-              onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring(30000)}
-            >
-              {monitoringStatus.isRunning ? (
-                <>
-                  <WifiOff className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Stop</span>
-                </>
-              ) : (
-                <>
-                  <Wifi className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Start</span>
-                </>
-              )}
-            </Button>
+            {isEquipmentFeatureEnabled("showRefreshButton") && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRefreshAll}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`h-4 w-4 sm:mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+              </Button>
+            )}
+            {isEquipmentFeatureEnabled("showStartStopButtons") && (
+              <Button 
+                variant={monitoringStatus.isRunning ? "destructive" : "default"}
+                size="sm"
+                onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring(30000)}
+              >
+                {monitoringStatus.isRunning ? (
+                  <>
+                    <WifiOff className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Stop</span>
+                  </>
+                ) : (
+                  <>
+                    <Wifi className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Start</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
           
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              console.log("Export button clicked");
-              setIsImportExportDialogOpen(true);
-            }}
-          >
-            <Download className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Export</span>
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => {
-              console.log("Import button clicked");
-              setIsImportExportDialogOpen(true);
-            }}
-          >
-            <Upload className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Import</span>
-          </Button>
+          {isEquipmentFeatureEnabled("showImportExportButtons") && (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  console.log("Export button clicked");
+                  setIsImportExportDialogOpen(true);
+                }}
+              >
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  console.log("Import button clicked");
+                  setIsImportExportDialogOpen(true);
+                }}
+              >
+                <Upload className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Import</span>
+              </Button>
+            </>
+          )}
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
@@ -647,94 +656,140 @@ export function MiningEquipmentDashboard() {
       </div>
 
       {/* Equipment Overview Cards */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Total Equipment</CardTitle>
-            <Truck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold">{equipment?.length || 0}</div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Active equipment
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {isEquipmentFeatureEnabled("showTotalEquipmentCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Total Equipment</CardTitle>
+              <Truck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold">{equipment?.length || 0}</div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Active equipment
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Online</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold text-green-600">
-              {getAccurateOnlineCount()}
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Operational
-            </p>
-          </CardContent>
-        </Card>
+        {isEquipmentFeatureEnabled("showAssignedEquipmentCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Assigned IPs</CardTitle>
+              <Link className="h-4 w-4 text-green-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-green-700 dark:text-green-400">
+                {equipment?.filter(e => getIPAssignment(e.id) !== "Not assigned").length || 0}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                With IP addresses
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Offline</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold text-red-600">
-              {getAccurateOfflineCount()}
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Attention needed
-            </p>
-          </CardContent>
-        </Card>
+        {isEquipmentFeatureEnabled("showUnassignedEquipmentCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Unassigned IPs</CardTitle>
+              <Unlink className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-blue-700 dark:text-blue-400">
+                {equipment?.filter(e => getIPAssignment(e.id) === "Not assigned").length || 0}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Without IP addresses
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Maintenance</CardTitle>
-            <Wrench className="h-4 w-4 text-yellow-600 flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold text-yellow-600">
-              {equipment?.filter(e => e.status === "MAINTENANCE").length || 0}
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Under service
-            </p>
-          </CardContent>
-        </Card>
+        {isEquipmentFeatureEnabled("showOnlineCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Online</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-green-600">
+                {getAccurateOnlineCount()}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Operational
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Monitoring</CardTitle>
-            <Activity className="h-4 w-4 text-blue-600 flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold text-blue-600">
-              {monitoringStatus.isRunning ? "ON" : "OFF"}
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Real-time
-            </p>
-          </CardContent>
-        </Card>
+        {isEquipmentFeatureEnabled("showOfflineCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Offline</CardTitle>
+              <XCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-red-600">
+                {getAccurateOfflineCount()}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Attention needed
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Health</CardTitle>
-            <Network className="h-4 w-4 text-indigo-600 flex-shrink-0" />
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-between">
-            <div className="text-xl sm:text-2xl font-bold text-indigo-600">
-              {equipment?.length > 0 ? Math.round((getAccurateOnlineCount() / equipment.length) * 100) : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">
-              Network uptime
-            </p>
-          </CardContent>
-        </Card>
+        {isEquipmentFeatureEnabled("showMaintenanceCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Maintenance</CardTitle>
+              <Wrench className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-yellow-600">
+                {equipment?.filter(e => e.status === "MAINTENANCE").length || 0}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Under service
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {isEquipmentFeatureEnabled("showMonitoringCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Monitoring</CardTitle>
+              <Activity className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600">
+                {monitoringStatus.isRunning ? "ON" : "OFF"}
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Real-time
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {isEquipmentFeatureEnabled("showHealthCard") && (
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium line-clamp-1">Health</CardTitle>
+              <Network className="h-4 w-4 text-indigo-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="text-xl sm:text-2xl font-bold text-indigo-600">
+                {equipment?.length > 0 ? Math.round((getAccurateOnlineCount() / equipment.length) * 100) : 0}%
+              </div>
+              <p className="text-xs text-muted-foreground line-clamp-1">
+                Network uptime
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Filters and Search */}
@@ -792,12 +847,20 @@ export function MiningEquipmentDashboard() {
                   <TableHead className="min-w-[180px]">Equipment</TableHead>
                   <TableHead className="min-w-[100px]">Type</TableHead>
                   <TableHead className="min-w-[140px]">IP Address</TableHead>
-                  <TableHead className="min-w-[150px]">Real-time Status</TableHead>
-                  <TableHead className="min-w-[120px]">Response Time</TableHead>
-                  <TableHead className="min-w-[140px]">Signal Strength</TableHead>
+                  {isEquipmentFeatureEnabled("showRealTimeStatusColumn") && (
+                    <TableHead className="min-w-[150px]">Real-time Status</TableHead>
+                  )}
+                  {isEquipmentFeatureEnabled("showResponseTimeColumn") && (
+                    <TableHead className="min-w-[120px]">Response Time</TableHead>
+                  )}
+                  {isEquipmentFeatureEnabled("showSignalStrengthColumn") && (
+                    <TableHead className="min-w-[140px]">Signal Strength</TableHead>
+                  )}
                   <TableHead className="min-w-[120px]">Location</TableHead>
                   <TableHead className="min-w-[120px]">Operator</TableHead>
-                  <TableHead className="min-w-[140px]">Last Seen</TableHead>
+                  {isEquipmentFeatureEnabled("showLastSeenColumn") && (
+                    <TableHead className="min-w-[140px]">Last Seen</TableHead>
+                  )}
                   <TableHead className="min-w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -847,36 +910,42 @@ export function MiningEquipmentDashboard() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <Badge className={isOnline ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}>
-                          {isOnline ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                          <span className="text-xs">{isOnline ? "ONLINE" : "OFFLINE"}</span>
-                    </Badge>
-                        {realTimeStatus && (
-                          <div className="flex items-center space-x-1">
-                            <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                            <span className="text-xs text-muted-foreground">Live</span>
-                          </div>
-                        )}
-                      </div>
-                  </TableCell>
-                  <TableCell>
-                      {responseTime ? (
-                    <div className="flex items-center space-x-1">
-                          <Timer className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm font-mono">{responseTime}ms</span>
-                    </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">N/A</span>
-                      )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                        <Signal className={`h-3 w-3 ${getSignalStrengthColor(signalStrength)}`} />
-                        <span className="text-sm font-medium">{Math.round(signalStrength)}%</span>
-                      </div>
+                    {isEquipmentFeatureEnabled("showRealTimeStatusColumn") && (
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Badge className={isOnline ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}>
+                            {isOnline ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                            <span className="text-xs">{isOnline ? "ONLINE" : "OFFLINE"}</span>
+                      </Badge>
+                          {realTimeStatus && (
+                            <div className="flex items-center space-x-1">
+                              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                              <span className="text-xs text-muted-foreground">Live</span>
+                            </div>
+                          )}
+                        </div>
                     </TableCell>
+                    )}
+                    {isEquipmentFeatureEnabled("showResponseTimeColumn") && (
+                      <TableCell>
+                        {responseTime ? (
+                      <div className="flex items-center space-x-1">
+                            <Timer className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-sm font-mono">{responseTime}ms</span>
+                      </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">N/A</span>
+                        )}
+                    </TableCell>
+                    )}
+                    {isEquipmentFeatureEnabled("showSignalStrengthColumn") && (
+                      <TableCell>
+                      <div className="flex items-center space-x-2">
+                          <Signal className={`h-3 w-3 ${getSignalStrengthColor(signalStrength)}`} />
+                          <span className="text-sm font-medium">{Math.round(signalStrength)}%</span>
+                        </div>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center space-x-1">
                         <MapPin className="h-3 w-3 text-muted-foreground" />
@@ -884,18 +953,20 @@ export function MiningEquipmentDashboard() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">{item.operator || "Unassigned"}</TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {lastSeen ? (
-                          <div>
-                            <div className="font-medium">{formatDateForDisplay(lastSeen, 'short')}</div>
-                            <div className="text-xs text-muted-foreground">{getTimeAgo(lastSeen).fullText}</div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Never</span>
-                        )}
-                      </div>
-                    </TableCell>
+                    {isEquipmentFeatureEnabled("showLastSeenColumn") && (
+                      <TableCell>
+                        <div className="text-sm">
+                          {lastSeen ? (
+                            <div>
+                              <div className="font-medium">{formatDateForDisplay(lastSeen, 'short')}</div>
+                              <div className="text-xs text-muted-foreground">{getTimeAgo(lastSeen).fullText}</div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Never</span>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex items-center space-x-1">
                       <Button

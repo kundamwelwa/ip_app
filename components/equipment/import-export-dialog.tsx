@@ -50,6 +50,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<EquipmentImportData[]>([]);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,64 +78,121 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     }
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setIsProcessing(true);
     
-    // Simulate import processing
-    setTimeout(() => {
-      const result: ImportResult = {
-        success: true,
-        imported: importData.length,
-        errors: [],
-        warnings: []
-      };
-
-      // Validate each item
+    try {
+      // Validate each item before sending
+      const validationErrors: string[] = [];
       importData.forEach((item, index) => {
         const validation = validateEquipmentData(item);
         if (!validation.isValid) {
-          result.errors.push(`Row ${index + 2}: ${validation.errors.join(", ")}`);
+          validationErrors.push(`Row ${index + 2}: ${validation.errors.join(", ")}`);
         }
       });
 
-      if (result.errors.length > 0) {
-        result.success = false;
-        result.imported = 0;
-      } else {
-        // Convert to equipment format and import
-        const equipmentData: MiningEquipment[] = importData.map((item, index) => ({
-          id: `EQ${Date.now()}${index}`,
-          name: item.name,
-          type: item.type as MiningEquipment['type'],
-          model: item.model,
-          manufacturer: item.manufacturer,
-          serialNumber: item.serialNumber,
-          ipAddress: item.ipAddress,
-          macAddress: item.macAddress,
-          status: "offline" as const,
-          location: item.location,
-          operator: item.operator,
-          lastMaintenance: new Date(),
-          nextMaintenance: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          operatingHours: 0,
-          fuelLevel: 0,
-          notes: item.notes || '',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }));
-
-        onImport(equipmentData);
+      if (validationErrors.length > 0) {
+        setImportResult({
+          success: false,
+          imported: 0,
+          errors: validationErrors,
+          warnings: []
+        });
+        setIsProcessing(false);
+        return;
       }
 
-      setImportResult(result);
+      // Call import API
+      const response = await fetch('/api/equipment/import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ equipment: importData }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to import equipment');
+      }
+
+      // Set success result
+      setImportResult({
+        success: data.results.successful > 0,
+        imported: data.results.successful,
+        errors: data.results.errors || [],
+        warnings: []
+      });
+
+      // If successful, refresh the equipment list
+      if (data.results.successful > 0) {
+        setTimeout(() => {
+          window.location.reload(); // Refresh the page to show new equipment
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error importing equipment:", error);
+      setImportResult({
+        success: false,
+        imported: 0,
+        errors: [error instanceof Error ? error.message : "Failed to import equipment"],
+        warnings: []
+      });
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
-  const handleExport = () => {
-    const csvContent = exportToCSV(equipment);
-    const filename = `equipment-export-${new Date().toISOString().split('T')[0]}.csv`;
-    downloadCSV(csvContent, filename);
+  const handleExport = async (format: 'csv' | 'json' = 'csv') => {
+    try {
+      setIsProcessing(true);
+      
+      const response = await fetch(`/api/equipment/export?format=${format}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export equipment');
+      }
+
+      if (format === 'csv') {
+        // Download CSV
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `equipment-export-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        // Download JSON
+        const data = await response.json();
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `equipment-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+
+      // Show success notification
+      alert(`Successfully exported ${equipment.length} equipment items as ${format.toUpperCase()}`);
+    } catch (error) {
+      console.error("Error exporting equipment:", error);
+      alert(error instanceof Error ? error.message : "Failed to export equipment");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleClose = () => {
@@ -143,6 +201,10 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     setImportResult(null);
     setSelectedFile(null);
     setPreviewData([]);
+    setExportFormat('csv');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     onClose();
   };
 
@@ -150,6 +212,43 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     const newData = previewData.filter((_, i) => i !== index);
     setPreviewData(newData);
     setImportData(newData);
+  };
+
+  const downloadTemplate = () => {
+    const headers = [
+      "Name",
+      "Type",
+      "Model",
+      "Manufacturer",
+      "MAC Address",
+      "Serial Number",
+      "Location",
+      "Operator",
+      "Notes"
+    ];
+
+    const sampleData = [
+      "Haul Truck 01",
+      "TRUCK",
+      "797F",
+      "Caterpillar",
+      "00:1A:2B:3C:4D:5E",
+      "CAT797-ABC123",
+      "Pit A - North",
+      "John Doe",
+      "Primary haul truck"
+    ];
+
+    const csvContent = `${headers.join(",")}\n${sampleData.join(",")}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'equipment-import-template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   console.log("ImportExportDialog render - isOpen:", isOpen);
@@ -197,6 +296,31 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
 
           {activeTab === "import" ? (
             <div className="space-y-6">
+              {/* Import Instructions */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-2 text-sm">
+                    <h4 className="font-semibold text-blue-900 dark:text-blue-100">Import Requirements</h4>
+                    <ul className="text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                      <li>Required fields: Name, Type, Model, Manufacturer, Serial Number, MAC Address, Location, Operator</li>
+                      <li>Valid types: TRUCK, EXCAVATOR, DRILL, LOADER, DOZER, SHOVEL, CRUSHER, CONVEYOR</li>
+                      <li>MAC Address format: XX:XX:XX:XX:XX:XX</li>
+                      <li>Each MAC Address must be unique</li>
+                    </ul>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={downloadTemplate}
+                      className="mt-2 bg-white dark:bg-slate-800"
+                    >
+                      <Download className="h-3 w-3 mr-2" />
+                      Download CSV Template
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               {/* File Upload */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Upload CSV File</h3>
@@ -359,13 +483,19 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                       <div className="flex justify-between">
                         <span>Online:</span>
                         <span className="font-medium text-green-600">
-                          {equipment.filter(e => e.status === 'online').length}
+                          {equipment.filter(e => {
+                            const status = typeof e.status === 'string' ? e.status.toUpperCase() : e.status;
+                            return status === 'ONLINE';
+                          }).length}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Offline:</span>
                         <span className="font-medium text-red-600">
-                          {equipment.filter(e => e.status === 'offline').length}
+                          {equipment.filter(e => {
+                            const status = typeof e.status === 'string' ? e.status.toUpperCase() : e.status;
+                            return status === 'OFFLINE';
+                          }).length}
                         </span>
                       </div>
                     </div>
@@ -374,20 +504,42 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                   <div className="p-4 border rounded-lg">
                     <h4 className="font-medium mb-2">Export Format</h4>
                     <p className="text-sm text-muted-foreground mb-3">
-                      CSV format compatible with Excel and other spreadsheet applications.
+                      Choose between CSV or JSON format for export.
                     </p>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-3">
                       <div className="flex items-center space-x-2">
-                        <FileSpreadsheet className="h-4 w-4 text-primary" />
-                        <span>CSV Format</span>
+                        <input
+                          type="radio"
+                          id="csv-format"
+                          name="export-format"
+                          value="csv"
+                          checked={exportFormat === 'csv'}
+                          onChange={() => setExportFormat('csv')}
+                          className="h-4 w-4"
+                        />
+                        <label htmlFor="csv-format" className="text-sm cursor-pointer flex items-center space-x-2">
+                          <FileSpreadsheet className="h-4 w-4 text-primary" />
+                          <span>CSV Format (Excel Compatible)</span>
+                        </label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span>UTF-8 Encoding</span>
+                        <input
+                          type="radio"
+                          id="json-format"
+                          name="export-format"
+                          value="json"
+                          checked={exportFormat === 'json'}
+                          onChange={() => setExportFormat('json')}
+                          className="h-4 w-4"
+                        />
+                        <label htmlFor="json-format" className="text-sm cursor-pointer flex items-center space-x-2">
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span>JSON Format (API Compatible)</span>
+                        </label>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span>Excel Compatible</span>
+                      <div className="pl-6 text-xs text-muted-foreground">
+                        <CheckCircle className="h-3 w-3 inline mr-1 text-green-600" />
+                        UTF-8 Encoding
                       </div>
                     </div>
                   </div>
@@ -413,16 +565,22 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                       <tbody>
                         {equipment.slice(0, 10).map((item) => (
                           <tr key={item.id} className="border-t">
-                            <td className="p-2">{item.id}</td>
+                            <td className="p-2 font-mono text-xs">{item.id}</td>
                             <td className="p-2">{item.name}</td>
-                            <td className="p-2">{item.type}</td>
                             <td className="p-2">
-                              <Badge variant={item.status === 'online' ? 'default' : 'destructive'}>
+                              <Badge variant="outline">{item.type}</Badge>
+                            </td>
+                            <td className="p-2">
+                              <Badge variant={
+                                (typeof item.status === 'string' ? item.status.toUpperCase() : item.status) === 'ONLINE' 
+                                  ? 'default' 
+                                  : 'destructive'
+                              }>
                                 {item.status}
                               </Badge>
                             </td>
-                            <td className="p-2">{item.location}</td>
-                            <td className="p-2">{item.ipAddress}</td>
+                            <td className="p-2">{item.location || 'N/A'}</td>
+                            <td className="p-2 font-mono text-xs">{item.ipAddress || 'Not assigned'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -462,9 +620,21 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
               )}
             </Button>
           ) : (
-            <Button onClick={handleExport}>
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
+            <Button 
+              onClick={() => handleExport(exportFormat)}
+              disabled={isProcessing || equipment.length === 0}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export {exportFormat.toUpperCase()}
+                </>
+              )}
             </Button>
           )}
         </DialogFooter>

@@ -95,3 +95,34 @@ export function getEnabledSidebarFeatures(): Record<string, boolean> {
   return { ...sidebarFeatures };
 }
 
+// Equipment Management Feature Flags
+export const equipmentFeatures = {
+  // Metric Cards
+  showTotalEquipmentCard: true,
+  showOnlineCard: false,              // Hidden for now
+  showOfflineCard: false,             // Hidden for now
+  showMaintenanceCard: false,         // Hidden for now
+  showMonitoringCard: false,          // Hidden for now
+  showHealthCard: false,              // Hidden for now
+  showAssignedEquipmentCard: true,    // New: Equipment with IPs assigned
+  showUnassignedEquipmentCard: true,  // New: Equipment without IPs
+  
+  // Table Columns
+  showRealTimeStatusColumn: false,    // Hidden for now
+  showResponseTimeColumn: false,      // Hidden for now
+  showSignalStrengthColumn: false,    // Hidden for now
+  showLastSeenColumn: false,          // Hidden for now
+  
+  // Monitoring Controls
+  showStartStopButtons: false,        // Hidden for now (Start/Stop monitoring)
+  showRefreshButton: true,
+  showImportExportButtons: true,
+} as const;
+
+/**
+ * Check if an equipment feature is enabled
+ */
+export function isEquipmentFeatureEnabled(feature: keyof typeof equipmentFeatures): boolean {
+  return equipmentFeatures[feature] === true;
+}
+

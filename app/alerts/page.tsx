@@ -33,7 +33,7 @@ export default function AlertsPage() {
 
   return (
     <DashboardLayout>
-      <AlertsDashboard />
+      <AlertsDashboard session={session} />
     </DashboardLayout>
   );
 }
