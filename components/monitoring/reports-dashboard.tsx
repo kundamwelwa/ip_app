@@ -1,54 +1,38 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ReportGenerator } from "@/components/reports/report-generator";
+import { ReportSettings } from "@/components/reports/report-settings";
+import { ReportAnalytics } from "@/components/reports/report-analytics";
+import { ReportList } from "@/components/reports/report-list";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
-import { 
-  Search, 
-  Download, 
-  Calendar,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
   FileText,
-  Filter,
   RefreshCw,
   Settings,
-  Eye,
-  Share
+  Plus,
+  BarChart3,
+  List,
+  Loader2,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react";
 
 // Types
 interface Report {
   id: string;
   name: string;
-  type: "equipment_status" | "ip_management" | "network_performance" | "maintenance" | "alerts" | "custom";
+  type: string;
+  category: string;
   description: string;
-  generatedAt: Date;
+  generatedAt: string;
   generatedBy: string;
   status: "generating" | "completed" | "failed";
   fileSize?: string;
   downloadUrl?: string;
+  format: string;
   parameters?: Record<string, any>;
 }
 
@@ -57,550 +41,419 @@ interface ReportTemplate {
   name: string;
   description: string;
   type: string;
+  category: "equipment" | "network" | "maintenance" | "alerts" | "custom";
   parameters: {
     name: string;
-    type: "date" | "select" | "text" | "number";
+    label: string;
+    type: "date" | "daterange" | "select" | "text" | "number" | "multiselect";
     required: boolean;
     options?: string[];
+    defaultValue?: string;
   }[];
   isDefault: boolean;
+  estimatedTime?: string;
+}
+
+interface AnalyticsData {
+  totalReports: number;
+  completedReports: number;
+  generatingReports: number;
+  failedReports: number;
+  avgGenerationTime: number;
+  successRate: number;
+  reportsThisWeek: number;
+  reportsThisMonth: number;
+  reportsByType: {
+    type: string;
+    count: number;
+    percentage: number;
+  }[];
+  recentTrends: {
+    label: string;
+    value: number;
+    trend: "up" | "down" | "stable";
+    percentage: number;
+  }[];
 }
 
 export function ReportsDashboard() {
   const [activeTab, setActiveTab] = useState("reports");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  
+  // Data states
+  const [reports, setReports] = useState<Report[]>([]);
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  
+  // Loading states
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data
-  const [reports, setReports] = useState<Report[]>([
-    {
-      id: "RPT001",
-      name: "Equipment Status Report",
-      type: "equipment_status",
-      description: "Comprehensive status report for all mining equipment",
-      generatedAt: new Date("2024-01-20T10:00:00"),
-      generatedBy: "Admin",
-      status: "completed",
-      fileSize: "2.3 MB",
-      downloadUrl: "/reports/equipment-status-2024-01-20.pdf",
-    },
-    {
-      id: "RPT002",
-      name: "IP Management Report",
-      type: "ip_management",
-      description: "IP address assignments and conflicts report",
-      generatedAt: new Date("2024-01-19T15:30:00"),
-      generatedBy: "Admin",
-      status: "completed",
-      fileSize: "1.8 MB",
-      downloadUrl: "/reports/ip-management-2024-01-19.pdf",
-    },
-    {
-      id: "RPT003",
-      name: "Network Performance Report",
-      type: "network_performance",
-      description: "Network performance metrics and analysis",
-      generatedAt: new Date("2024-01-18T09:15:00"),
-      generatedBy: "Admin",
-      status: "completed",
-      fileSize: "3.1 MB",
-      downloadUrl: "/reports/network-performance-2024-01-18.pdf",
-    },
-    {
-      id: "RPT004",
-      name: "Maintenance Schedule Report",
-      type: "maintenance",
-      description: "Upcoming maintenance schedules and history",
-      generatedAt: new Date("2024-01-20T14:45:00"),
-      generatedBy: "Admin",
-      status: "generating",
-    },
-    {
-      id: "RPT005",
-      name: "Alerts Summary Report",
-      type: "alerts",
-      description: "Summary of all system alerts and resolutions",
-      generatedAt: new Date("2024-01-17T16:20:00"),
-      generatedBy: "Admin",
-      status: "completed",
-      fileSize: "1.2 MB",
-      downloadUrl: "/reports/alerts-summary-2024-01-17.pdf",
-    },
-  ]);
+  // Fetch reports
+  const fetchReports = async (showLoader = true) => {
+    try {
+      if (showLoader) setLoading(true);
+      setError(null);
 
-  const [templates, setTemplates] = useState<ReportTemplate[]>([
-    {
-      id: "TMP001",
-      name: "Equipment Status Report",
-      description: "Generate a comprehensive equipment status report",
-      type: "equipment_status",
-      parameters: [
-        { name: "startDate", type: "date", required: true },
-        { name: "endDate", type: "date", required: true },
-        { name: "equipmentType", type: "select", required: false, options: ["All", "Truck", "Excavator", "Drill", "Loader"] },
-        { name: "includeOffline", type: "select", required: false, options: ["Yes", "No"] },
-      ],
-      isDefault: true,
-    },
-    {
-      id: "TMP002",
-      name: "IP Management Report",
-      description: "Generate IP address management report",
-      type: "ip_management",
-      parameters: [
-        { name: "startDate", type: "date", required: true },
-        { name: "endDate", type: "date", required: true },
-        { name: "includeConflicts", type: "select", required: false, options: ["Yes", "No"] },
-      ],
-      isDefault: true,
-    },
-    {
-      id: "TMP003",
-      name: "Network Performance Report",
-      description: "Generate network performance analysis report",
-      type: "network_performance",
-      parameters: [
-        { name: "startDate", type: "date", required: true },
-        { name: "endDate", type: "date", required: true },
-        { name: "metricType", type: "select", required: false, options: ["All", "Latency", "Packet Loss", "Signal Strength"] },
-      ],
-      isDefault: true,
-    },
-    {
-      id: "TMP004",
-      name: "Custom Report",
-      description: "Create a custom report with specific parameters",
-      type: "custom",
-      parameters: [
-        { name: "reportName", type: "text", required: true },
-        { name: "startDate", type: "date", required: true },
-        { name: "endDate", type: "date", required: true },
-        { name: "dataSources", type: "select", required: false, options: ["Equipment", "IP Management", "Network", "Alerts"] },
-      ],
-      isDefault: false,
-    },
-  ]);
+      const response = await fetch("/api/reports");
+      if (!response.ok) throw new Error("Failed to fetch reports");
 
-  // Statistics
-  const totalReports = reports.length;
-  const completedReports = reports.filter(r => r.status === "completed").length;
-  const generatingReports = reports.filter(r => r.status === "generating").length;
-  const failedReports = reports.filter(r => r.status === "failed").length;
-
-  // Filter functions
-  const filteredReports = reports.filter(report => {
-    const matchesSearch = report.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         report.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === "all" || report.type === filterType;
-    const matchesStatus = filterStatus === "all" || report.status === filterStatus;
-    
-    return matchesSearch && matchesType && matchesStatus;
-  });
-
-  const getTypeBadge = (type: string) => {
-    const variants = {
-      equipment_status: "default",
-      ip_management: "secondary",
-      network_performance: "outline",
-      maintenance: "secondary",
-      alerts: "destructive",
-      custom: "outline",
-    } as const;
-
-    return (
-      <Badge variant={variants[type as keyof typeof variants] || "outline"}>
-        {type.replace('_', ' ').charAt(0).toUpperCase() + type.replace('_', ' ').slice(1)}
-      </Badge>
-    );
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      completed: "default",
-      generating: "secondary",
-      failed: "destructive",
-    } as const;
-
-    return (
-      <Badge variant={variants[status as keyof typeof variants] || "outline"}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
-    );
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <FileText className="h-4 w-4 text-green-500" />;
-      case "generating":
-        return <RefreshCw className="h-4 w-4 text-blue-500 animate-spin" />;
-      case "failed":
-        return <FileText className="h-4 w-4 text-red-500" />;
-      default:
-        return <FileText className="h-4 w-4 text-gray-500" />;
+      const data = await response.json();
+      setReports(data.reports || []);
+    } catch (err) {
+      console.error("Error fetching reports:", err);
+      setError(err instanceof Error ? err.message : "Failed to load reports");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const handleGenerateReport = (templateId: string) => {
-    const template = templates.find(t => t.id === templateId);
-    if (!template) return;
+  // Fetch templates
+  const fetchTemplates = async () => {
+    try {
+      const response = await fetch("/api/reports/templates");
+      if (!response.ok) throw new Error("Failed to fetch templates");
 
-    const newReport: Report = {
-      id: `RPT${String(reports.length + 1).padStart(3, '0')}`,
-      name: template.name,
-      type: template.type as any,
-      description: template.description,
-      generatedAt: new Date(),
-      generatedBy: "Current User",
-      status: "generating",
-    };
-
-    setReports([newReport, ...reports]);
+      const data = await response.json();
+      setTemplates(data.templates || []);
+    } catch (err) {
+      console.error("Error fetching templates:", err);
+    }
   };
 
-  const handleDownloadReport = (reportId: string) => {
-    const report = reports.find(r => r.id === reportId);
-    if (!report || !report.downloadUrl) return;
+  // Fetch analytics
+  const fetchAnalytics = async () => {
+    try {
+      const response = await fetch("/api/reports/analytics");
+      if (!response.ok) throw new Error("Failed to fetch analytics");
 
-    // In a real application, this would trigger a download
-    console.log(`Downloading report: ${report.downloadUrl}`);
+      const data = await response.json();
+      setAnalytics(data);
+    } catch (err) {
+      console.error("Error fetching analytics:", err);
+    }
   };
+
+  // Initial load
+  useEffect(() => {
+    fetchReports();
+    fetchTemplates();
+    fetchAnalytics();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchReports(false);
+      fetchAnalytics();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle refresh
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchReports(false);
+    fetchTemplates();
+    fetchAnalytics();
+  };
+
+  // Handle report generation
+  const handleGenerateReport = async (templateId: string, parameters: Record<string, any>) => {
+    try {
+      const response = await fetch("/api/reports/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId, parameters }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate report");
+      }
+
+      const data = await response.json();
+      
+      // Refresh reports list
+      await fetchReports(false);
+      await fetchAnalytics();
+      
+      alert(`Report generation started: ${data.reportId}`);
+    } catch (err) {
+      console.error("Error generating report:", err);
+      throw err;
+    }
+  };
+
+  // Handle report download
+  const handleDownload = async (reportId: string) => {
+    try {
+      const response = await fetch(`/api/reports/${reportId}/download`);
+      if (!response.ok) throw new Error("Failed to download report");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${reportId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error downloading report:", err);
+      alert("Failed to download report. Please try again.");
+    }
+  };
+
+  // Handle report view
+  const handleView = async (reportId: string) => {
+    try {
+      const response = await fetch(`/api/reports/${reportId}`);
+      if (!response.ok) throw new Error("Failed to fetch report details");
+
+      const data = await response.json();
+      // Open in new window or show in modal
+      console.log("Report details:", data);
+      alert("View functionality - implement modal or new window");
+    } catch (err) {
+      console.error("Error viewing report:", err);
+      alert("Failed to view report. Please try again.");
+    }
+  };
+
+  // Handle report share
+  const handleShare = async (reportId: string) => {
+    try {
+      const response = await fetch(`/api/reports/${reportId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipients: [] }), // Get from dialog
+      });
+
+      if (!response.ok) throw new Error("Failed to share report");
+
+      alert("Report shared successfully!");
+    } catch (err) {
+      console.error("Error sharing report:", err);
+      alert("Failed to share report. Please try again.");
+    }
+  };
+
+  // Handle report delete
+  const handleDelete = async (reportId: string) => {
+    if (!confirm("Are you sure you want to delete this report?")) return;
+
+    try {
+      const response = await fetch(`/api/reports/${reportId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete report");
+
+      await fetchReports(false);
+      await fetchAnalytics();
+      alert("Report deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting report:", err);
+      alert("Failed to delete report. Please try again.");
+    }
+  };
+
+  // Calculate statistics
+  const stats = {
+    total: reports.length,
+    completed: reports.filter((r) => r.status === "completed").length,
+    generating: reports.filter((r) => r.status === "generating").length,
+    failed: reports.filter((r) => r.status === "failed").length,
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading reports system...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">
-            Generate and manage system reports and analytics
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 dark:from-blue-400 dark:via-purple-400 dark:to-cyan-400 bg-clip-text text-transparent">
+            Reports & Analytics
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Generate, manage, and analyze system reports
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button variant="outline">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+          >
             <Settings className="h-4 w-4 mr-2" />
             Settings
           </Button>
         </div>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <p className="text-sm font-medium text-red-700 dark:text-red-300">
+              {error}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Statistics Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-2 border-blue-200 dark:border-blue-900/50 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalReports}</div>
-            <p className="text-xs text-muted-foreground">
-              All reports
-            </p>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+              {stats.total}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">All generated</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-2 border-green-200 dark:border-green-900/50 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <FileText className="h-4 w-4 text-green-500" />
+            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{completedReports}</div>
-            <p className="text-xs text-muted-foreground">
-              Ready for download
-            </p>
+            <div className="text-2xl font-bold text-green-700 dark:text-green-400">
+              {stats.completed}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Ready to download</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-2 border-orange-200 dark:border-orange-900/50 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Generating</CardTitle>
-            <RefreshCw className="h-4 w-4 text-blue-500" />
+            <Loader2 className="h-4 w-4 text-orange-600 dark:text-orange-400 animate-spin" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{generatingReports}</div>
-            <p className="text-xs text-muted-foreground">
-              In progress
-            </p>
+            <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">
+              {stats.generating}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">In progress</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-2 border-red-200 dark:border-red-900/50 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Failed</CardTitle>
-            <FileText className="h-4 w-4 text-red-500" />
+            <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{failedReports}</div>
-            <p className="text-xs text-muted-foreground">
-              Need attention
-            </p>
+            <div className="text-2xl font-bold text-red-700 dark:text-red-400">
+              {stats.failed}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Need attention</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="templates">Templates</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        <TabsList className="bg-muted/40 p-1 grid w-full grid-cols-3 gap-1">
+          <TabsTrigger
+            value="reports"
+            className="data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-muted/60 transition-all"
+          >
+            <List className="h-4 w-4 mr-2" />
+            Reports List
+          </TabsTrigger>
+          <TabsTrigger
+            value="generate"
+            className="data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-muted/60 transition-all"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Generate New
+          </TabsTrigger>
+          <TabsTrigger
+            value="analytics"
+            className="data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-md data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:bg-muted/60 transition-all"
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Analytics
+          </TabsTrigger>
         </TabsList>
 
-        {/* Reports Tab */}
-        <TabsContent value="reports" className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search reports..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="equipment_status">Equipment Status</SelectItem>
-                <SelectItem value="ip_management">IP Management</SelectItem>
-                <SelectItem value="network_performance">Network Performance</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="alerts">Alerts</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="generating">Generating</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Generated Reports</CardTitle>
-              <CardDescription>
-                All generated reports and their status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Report Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Generated By</TableHead>
-                    <TableHead>Generated At</TableHead>
-                    <TableHead>File Size</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredReports.map((report) => (
-                    <TableRow key={report.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{report.name}</div>
-                          <div className="text-sm text-muted-foreground max-w-xs truncate">{report.description}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getTypeBadge(report.type)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(report.status)}
-                          {getStatusBadge(report.status)}
-                        </div>
-                      </TableCell>
-                      <TableCell>{report.generatedBy}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>{report.generatedAt.toLocaleDateString()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {report.fileSize ? (
-                          <span className="text-sm text-muted-foreground">{report.fileSize}</span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {report.status === "completed" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDownloadReport(report.id)}
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
-                          )}
-                          <Button size="sm" variant="outline">
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Share className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        {/* Reports List Tab */}
+        <TabsContent value="reports">
+          <ReportList
+            reports={reports}
+            loading={refreshing}
+            onDownload={handleDownload}
+            onView={handleView}
+            onShare={handleShare}
+            onDelete={handleDelete}
+            onRefresh={handleRefresh}
+          />
         </TabsContent>
 
-        {/* Templates Tab */}
-        <TabsContent value="templates" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Report Templates</CardTitle>
-              <CardDescription>
-                Pre-configured report templates for quick generation
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                {templates.map((template) => (
-                  <Card key={template.id} className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium">{template.name}</h3>
-                      {template.isDefault && (
-                        <Badge variant="outline" className="text-xs">Default</Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4">{template.description}</p>
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium">Parameters:</div>
-                      <div className="text-xs text-muted-foreground">
-                        {template.parameters.map((param, index) => (
-                          <span key={index}>
-                            {param.name}
-                            {param.required && <span className="text-red-500">*</span>}
-                            {index < template.parameters.length - 1 && ", "}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <Button
-                        size="sm"
-                        onClick={() => handleGenerateReport(template.id)}
-                        className="w-full"
-                      >
-                        Generate Report
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Generate Report Tab */}
+        <TabsContent value="generate">
+          {templates.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-sm text-muted-foreground">
+                  No report templates available.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <ReportGenerator templates={templates} onGenerate={handleGenerateReport} />
+          )}
         </TabsContent>
 
         {/* Analytics Tab */}
-        <TabsContent value="analytics" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+        <TabsContent value="analytics">
+          {analytics ? (
+            <ReportAnalytics data={analytics} />
+          ) : (
             <Card>
-              <CardHeader>
-                <CardTitle>Report Generation Trends</CardTitle>
-                <CardDescription>
-                  Report generation over time
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">This Week</span>
-                    <span className="text-sm text-muted-foreground">12 reports</span>
-                  </div>
-                  <Progress value={80} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">This Month</span>
-                    <span className="text-sm text-muted-foreground">45 reports</span>
-                  </div>
-                  <Progress value={90} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Success Rate</span>
-                    <span className="text-sm text-muted-foreground">95%</span>
-                  </div>
-                  <Progress value={95} className="h-2" />
-                </div>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BarChart3 className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-sm text-muted-foreground">
+                  No analytics data available.
+                </p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Popular Report Types</CardTitle>
-                <CardDescription>
-                  Most frequently generated reports
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Equipment Status</span>
-                    <span className="text-sm text-muted-foreground">35%</span>
-                  </div>
-                  <Progress value={35} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">IP Management</span>
-                    <span className="text-sm text-muted-foreground">25%</span>
-                  </div>
-                  <Progress value={25} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Network Performance</span>
-                    <span className="text-sm text-muted-foreground">20%</span>
-                  </div>
-                  <Progress value={20} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Maintenance</span>
-                    <span className="text-sm text-muted-foreground">15%</span>
-                  </div>
-                  <Progress value={15} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Alerts</span>
-                    <span className="text-sm text-muted-foreground">5%</span>
-                  </div>
-                  <Progress value={5} className="h-2" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </TabsContent>
       </Tabs>
+
+      {/* Settings Dialog */}
+      <ReportSettings open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

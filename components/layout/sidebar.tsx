@@ -211,18 +211,16 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         <div className="flex h-16 items-center px-6">
           {/* Logo and Title */}
           <div className={cn(
-            "flex items-center space-x-2 transition-all duration-300 ease-in-out",
+            "flex items-center transition-all duration-300 ease-in-out",
             isCollapsed ? "justify-center w-full" : "flex-1"
           )}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary flex-shrink-0">
-              <Building2 className="h-5 w-5 text-primary-foreground" />
-            </div>
             <div className={cn(
-              "flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
+              "transition-all duration-300 ease-in-out overflow-hidden",
               isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
             )}>
-              <span className="text-sm font-semibold whitespace-nowrap">Rajant Mesh</span>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Mining Network</span>
+              <span className="text-lg font-bold whitespace-nowrap bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
+                Navigation
+              </span>
             </div>
           </div>
           

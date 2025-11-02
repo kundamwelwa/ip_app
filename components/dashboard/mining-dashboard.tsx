@@ -40,6 +40,8 @@ import { AssignmentDialog, AssignmentFormData } from "@/components/ip/assignment
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
 import { ReservationDialog, ReservationFormData } from "@/components/ip/reservation-dialog";
 import { MeshTopology } from "@/components/network/mesh-topology";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { ToastContainer } from "@/components/ui/toast-notification";
 import { processEquipmentData, calculateNetworkStats, getNetworkHealthColor, getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 import { getTimeAgo, formatDateForDisplay } from "@/lib/time-utils";
 import { isDashboardFeatureEnabled } from "@/lib/feature-flags";
@@ -125,6 +127,23 @@ export function MiningDashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Toast notifications
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: "success" | "error" | "warning" | "info" }>>([]);
+  
+  // Confirmation dialogs
+  const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
+  const [unassignIP, setUnassignIP] = useState("");
+  const [unassignLoading, setUnassignLoading] = useState(false);
+
+  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
+    const id = Math.random().toString(36).substring(7);
+    setToasts((prev) => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
 
   // Equipment monitoring
   const {
@@ -270,37 +289,25 @@ export function MiningDashboard() {
 
   const handleViewDetails = (ip: string) => {
     console.log("Viewing details for IP:", ip);
-    // For now, we'll show an alert with detailed information
-    // In a full implementation, this could open a modal or navigate to a details page
     const equipment = dashboardData?.equipment.find(eq => eq.ip === ip);
     if (equipment) {
-      const details = `IP Details for ${ip}:
-
-Equipment: ${equipment.name}
-Type: ${equipment.type}
-Status: ${equipment.isOnline ? 'ONLINE' : 'OFFLINE'} ${equipment.isOnline ? '(Real-time)' : ''}
-Location: ${equipment.location}
-Last Seen: ${equipment.lastSeenFormatted} (${equipment.timeAgo})
-Uptime: ${equipment.uptime}%
-Signal Strength: ${equipment.signalStrength}%
-Mesh Strength: ${equipment.meshStrength}%
-Response Time: ${equipment.responseTime ? `${equipment.responseTime}ms` : 'N/A'}
-Node ID: ${equipment.nodeId || 'N/A'}
-
-Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
-      alert(details);
+      showToast(`Equipment: ${equipment.name} | Status: ${equipment.isOnline ? 'ONLINE' : 'OFFLINE'} | Location: ${equipment.location}`, "info");
     } else {
-      alert(`IP ${ip} is available for assignment.`);
+      showToast(`IP ${ip} is available for assignment`, "info");
     }
   };
 
-  const handleUnassign = async (ip: string) => {
-    if (!confirm(`Are you sure you want to unassign IP address ${ip}? This will free it up for other equipment.`)) {
-      return;
-    }
+  const handleUnassign = (ip: string) => {
+    setUnassignIP(ip);
+    setUnassignDialogOpen(true);
+  };
+
+  const confirmUnassign = async () => {
+    if (!unassignIP) return;
 
     try {
-      const response = await fetch(`/api/ip-assignments?ip=${encodeURIComponent(ip)}`, {
+      setUnassignLoading(true);
+      const response = await fetch(`/api/ip-assignments?ip=${encodeURIComponent(unassignIP)}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -312,26 +319,21 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
         throw new Error(errorData.error || "Failed to unassign IP address");
       }
 
-      const result = await response.json();
-      console.log("IP unassignment successful:", result);
-      
-      // Show success message
-      alert(`IP address ${ip} has been successfully unassigned and is now available.`);
-      
-      // Refresh the dashboard data to show updated status
+      setUnassignDialogOpen(false);
+      showToast(`IP address ${unassignIP} has been successfully unassigned and is now available`, "success");
       await fetchDashboardData();
-      
     } catch (error) {
       console.error("Error unassigning IP address:", error);
-      alert(`Failed to unassign IP address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showToast(`Failed to unassign IP address: ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
+    } finally {
+      setUnassignLoading(false);
     }
   };
 
   const handleRefresh = async (ip: string) => {
     console.log("Refreshing status for IP:", ip);
-    // Refresh the dashboard data to get updated status
     await fetchDashboardData();
-    alert(`Status refreshed for IP address ${ip}.`);
+    showToast(`Status refreshed for IP address ${ip}`, "success");
   };
 
   const handleConfirmAssignment = (data: AssignmentFormData) => {
@@ -346,7 +348,7 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
       if (checkResponse.ok) {
         const checkData = await checkResponse.json();
         if (checkData.status === "assigned") {
-          alert(`IP address ${currentIP} is already assigned to ${checkData.assignment.equipment.name}. Cannot assign to another equipment.`);
+          showToast(`IP address ${currentIP} is already assigned to ${checkData.assignment.equipment.name}. Cannot assign to another equipment.`, "error");
           return;
         }
       }
@@ -368,21 +370,13 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
         throw new Error(errorData.error || "Failed to assign IP address");
       }
 
-      const result = await response.json();
-      console.log("IP assignment successful:", result);
-      
-      // Refresh the dashboard data to show updated status
+      showToast(`IP address ${currentIP} successfully assigned to ${equipmentName}`, "success");
       await fetchDashboardData();
-      
-      // Show success message
-      alert(`IP address ${currentIP} successfully assigned to ${equipmentName}`);
-      
-      // Close the equipment selection dialog
       setIsEquipmentSelectionOpen(false);
       
     } catch (error) {
       console.error("Error assigning IP address:", error);
-      alert(`Failed to assign IP address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showToast(`Failed to assign IP address: ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
     }
   };
 
@@ -914,6 +908,26 @@ Real-time monitoring: ${equipment.isOnline ? 'Active' : 'Inactive'}`;
         ipAddress={currentIP}
         onConfirm={handleConfirmReservation}
       />
+
+      {/* Unassign IP Confirmation Dialog */}
+      <ConfirmationDialog
+        open={unassignDialogOpen}
+        onOpenChange={setUnassignDialogOpen}
+        title="Unassign IP Address"
+        description={`Are you sure you want to unassign IP address ${unassignIP}?`}
+        confirmText="Unassign IP"
+        cancelText="Cancel"
+        onConfirm={confirmUnassign}
+        variant="warning"
+        loading={unassignLoading}
+        details={[
+          "The IP address will be freed up for assignment to other equipment",
+          "Equipment will lose network connectivity until a new IP is assigned",
+        ]}
+      />
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

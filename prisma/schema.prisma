@@ -12,20 +12,23 @@ datasource db {
 
 // User Management
 model User {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  firstName   String
-  lastName    String
-  department  String
-  role        UserRole @default(ADMIN)
-  password    String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String   @unique
+  firstName      String
+  lastName       String
+  department     String
+  role           UserRole @default(ADMIN)
+  password       String
+  phoneNumber    String?
+  profilePicture String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
   ipAssignments IPAssignment[]
   auditLogs     AuditLog[]
+  reports       Report[]
   acknowledgedAlerts Alert[] @relation("AlertAcknowledger")
   approvedAlerts     Alert[] @relation("AlertApprover")
   rejectedAlerts     Alert[] @relation("AlertRejecter")
@@ -272,4 +275,60 @@ enum AlertStatus {
   APPROVED
   REJECTED
   RESOLVED
+}
+
+// Report Management
+model Report {
+  id           String       @id @default(cuid())
+  name         String
+  type         String       // e.g., "equipment_status", "ip_management", "network_performance"
+  category     String       // e.g., "equipment", "network", "maintenance", "alerts", "custom"
+  description  String?
+  status       ReportStatus @default(GENERATING)
+  format       String       @default("pdf") // pdf, excel, csv, json
+  fileSize     String?
+  downloadUrl  String?
+  parameters   Json?        // Report generation parameters
+  
+  // User tracking
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  completedAt  DateTime?
+  failedAt     DateTime?
+  
+  @@map("reports")
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum ReportStatus {
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+// Report Template Management
+model ReportTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  description  String
+  type         String
+  category     String
+  parameters   Json     // Template parameters definition
+  isDefault    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  estimatedTime String? // e.g., "2-5 minutes"
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@map("report_templates")
+  @@index([category])
+  @@index([isActive])
 }

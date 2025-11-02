@@ -1,7 +1,8 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Building2, User, LogOut, Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { User, LogOut, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 
 export function Header() {
   const { data: session } = useSession();
+  const router = useRouter();
 
   if (!session) return null;
 
@@ -46,19 +48,9 @@ export function Header() {
       <div className="flex h-16 items-center justify-between px-6">
         {/* Logo and Title */}
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Building2 className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div className="flex flex-col">
-              <h1 className="text-lg font-bold tracking-tight">
-                First Quantum Mine [FQM]
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                IP Address Management System
-              </p>
-            </div>
-          </div>
+          <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
+            IP Address Management System
+          </h1>
         </div>
 
         {/* Right side - User info and controls */}
@@ -106,11 +98,11 @@ export function Header() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/profile")}>
                 <User className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </DropdownMenuItem>

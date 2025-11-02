@@ -126,3 +126,40 @@ export function isEquipmentFeatureEnabled(feature: keyof typeof equipmentFeature
   return equipmentFeatures[feature] === true;
 }
 
+// User Management Feature Flags
+export const userFeatures = {
+  // User List Features
+  showUserStats: true,
+  showActivityAnalytics: false,        // Hidden for now
+  showLastLoginColumn: false,          // Hidden for now
+  
+  // Actions
+  allowUserCreation: true,
+  allowUserEditing: true,
+  allowUserDeletion: true,
+  allowPasswordReset: true,
+  allowBulkActions: false,             // Hidden for now
+  allowUserImportExport: false,        // Hidden for now
+  
+  // Role Management
+  showRolePermissions: false,          // Hidden for now
+  allowCustomRoles: false,             // Hidden for now
+  
+  // Security Features
+  show2FASettings: false,              // Hidden for now
+  showSessionManagement: false,        // Hidden for now
+  showLoginHistory: false,             // Hidden for now
+  
+  // Profile Features
+  allowProfilePictureUpload: false,    // Hidden for now (future use)
+  showProfileActivity: true,
+  allowProfileEditing: true,
+} as const;
+
+/**
+ * Check if a user management feature is enabled
+ */
+export function isUserFeatureEnabled(feature: keyof typeof userFeatures): boolean {
+  return userFeatures[feature] === true;
+}
+
