@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -13,8 +13,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Await params (Next.js 15 requirement)
+    const { id } = await params;
+
     const equipment = await prisma.equipment.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         ipAssignments: {
           where: { isActive: true },
@@ -65,13 +68,16 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Await params (Next.js 15 requirement)
+    const { id } = await params;
 
     const body = await request.json();
     const {
@@ -95,7 +101,7 @@ export async function PUT(
 
     // Check if equipment exists
     const existingEquipment = await prisma.equipment.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingEquipment) {
@@ -117,7 +123,7 @@ export async function PUT(
 
     // Update equipment
     const equipment = await prisma.equipment.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name,
         type: equipmentType,
@@ -174,7 +180,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -182,9 +188,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Await params (Next.js 15 requirement)
+    const { id } = await params;
+
     // Check if equipment exists
     const equipment = await prisma.equipment.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         ipAssignments: {
           where: { isActive: true },
@@ -206,7 +215,7 @@ export async function DELETE(
 
     // Delete equipment
     await prisma.equipment.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     // Log the action
@@ -214,9 +223,9 @@ export async function DELETE(
       data: {
         action: "EQUIPMENT_DELETED",
         entityType: "EQUIPMENT",
-        entityId: params.id,
+        entityId: id,
         userId: session.user.id,
-        equipmentId: params.id,
+        equipmentId: id,
         details: {
           name: equipment.name,
           type: equipment.type,

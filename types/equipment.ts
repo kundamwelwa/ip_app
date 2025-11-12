@@ -51,6 +51,18 @@ export interface EquipmentFormData {
   operator: string;
   notes: string;
   status: string;
+  // Multiple IP address support
+  assignIPsOnCreation?: boolean;
+  numberOfIPs?: number;
+  ipAddresses?: IPAddressInput[];
+}
+
+export interface IPAddressInput {
+  address: string;
+  subnet: string;
+  gateway: string;
+  dns: string;
+  notes: string;
 }
 
 export interface EquipmentFilter {

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Badge } from "@/components/ui/badge";
+import { SystemSearch } from "@/components/ui/system-search";
 
 export function Header() {
   const { data: session } = useSession();
@@ -45,12 +46,10 @@ export function Header() {
 
   return (
     <header className="w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center justify-between px-6">
-        {/* Logo and Title */}
-        <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
-            IP Address Management System
-          </h1>
+      <div className="flex h-16 items-center justify-between px-6 gap-6">
+        {/* System Search */}
+        <div className="flex-1 max-w-3xl">
+          <SystemSearch />
         </div>
 
         {/* Right side - User info and controls */}

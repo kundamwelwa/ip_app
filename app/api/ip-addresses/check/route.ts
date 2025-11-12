@@ -63,25 +63,57 @@ export async function GET(request: NextRequest) {
 
     if (!ipAddress) {
       return NextResponse.json({
-        status: "available",
-        message: "IP address is available for assignment",
+        status: "not_in_database",
+        message: "This IP address is not in the system database",
         ip,
         type: "private", // You can implement logic to determine if IP is private/public
+        recommendation: "You need to add this IP address to the system first. You can:\n1. Add it to an equipment when creating/editing equipment\n2. Add it directly in IP Address Management\n3. Go to IP Management and add it there"
       });
     }
 
-    // Check if IP is assigned to equipment
-    const activeAssignment = ipAddress.assignments.find((assignment) => assignment.isActive);
-
-    if (activeAssignment && activeAssignment.equipment) {
+    // Check if IP has any active assignments
+    if (ipAddress.assignments && ipAddress.assignments.length > 0) {
+      const activeAssignment = ipAddress.assignments[0];
+      
+      // CRITICAL: Detect if there are multiple assignments (data integrity violation)
+      if (ipAddress.assignments.length > 1) {
+        console.error(`🚨 DATA INTEGRITY VIOLATION: IP ${ip} has ${ipAddress.assignments.length} active assignments!`);
+        ipAddress.assignments.forEach((assignment, index) => {
+          console.error(`  Assignment ${index + 1}: ${assignment.equipment?.name} (ID: ${assignment.equipment?.id})`);
+        });
+        
+        return NextResponse.json({
+          status: "conflict",
+          message: `CRITICAL: IP address ${ip} has ${ipAddress.assignments.length} active assignments! This is a data integrity violation.`,
+          ip,
+          type: "private",
+          conflict: true,
+          assignments: ipAddress.assignments.map(a => ({
+            assignmentId: a.id,
+            equipmentId: a.equipment?.id,
+            equipmentName: a.equipment?.name,
+            equipmentType: a.equipment?.type,
+            location: a.equipment?.location,
+            assignedAt: a.assignedAt,
+            assignedBy: a.user 
+              ? `${a.user.firstName} ${a.user.lastName}`
+              : "System",
+          })),
+          recommendation: "Use the System Integrity Monitor on the dashboard to resolve this conflict immediately."
+        });
+      }
+      
       return NextResponse.json({
         status: "assigned",
-        message: "IP address is assigned to equipment",
+        message: `IP address is already assigned to "${activeAssignment.equipment?.name}"${activeAssignment.equipment?.location ? ` at ${activeAssignment.equipment.location}` : ''}`,
         ip,
         type: "private",
         assignment: {
+          assignmentId: activeAssignment.id,
           assignedAt: activeAssignment.assignedAt,
-          assignedBy: `${activeAssignment.user.firstName} ${activeAssignment.user.lastName}`,
+          assignedBy: activeAssignment.user 
+            ? `${activeAssignment.user.firstName} ${activeAssignment.user.lastName}`
+            : "System",
           equipment: activeAssignment.equipment,
         },
       });

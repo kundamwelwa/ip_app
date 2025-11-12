@@ -38,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { isSidebarFeatureEnabled, sidebarFeatures } from "@/lib/feature-flags";
+import { AdaptiveLogo } from "@/components/ui/adaptive-logo";
 
 const navigation = [
   {
@@ -136,12 +137,12 @@ const navigation = [
         icon: Users,
         featureFlag: "users",
       },
-      {
+      /*{
         title: "Settings",
         href: "/settings",
         icon: Settings,
         featureFlag: "settings",
-      },
+      },*/
       {
         title: "Logs",
         href: "/logs",
@@ -209,18 +210,25 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       {/* Sidebar Header */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-16 items-center px-6">
-          {/* Logo and Title */}
+          {/* Logo */}
           <div className={cn(
             "flex items-center transition-all duration-300 ease-in-out",
             isCollapsed ? "justify-center w-full" : "flex-1"
           )}>
             <div className={cn(
               "transition-all duration-300 ease-in-out overflow-hidden",
-              isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"
+              isCollapsed ? "w-14 opacity-100" : "w-auto opacity-100"
             )}>
-              <span className="text-lg font-bold whitespace-nowrap bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
-                Navigation
-              </span>
+              <AdaptiveLogo 
+                width={isCollapsed ? 40 : 160} 
+                height={isCollapsed ? 40 : 50}
+                variant={isCollapsed ? "flat" : "default"}
+                priority
+                className={cn(
+                  "transition-all duration-300",
+                  isCollapsed ? "scale-90" : "scale-100"
+                )}
+              />
             </div>
           </div>
           

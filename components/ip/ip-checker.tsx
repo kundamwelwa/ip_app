@@ -21,7 +21,9 @@ import {
   Shield as ShieldIcon,
   Link,
   X,
-  Info
+  Info,
+  Plus,
+  Network
 } from "lucide-react";
 import { validateIPAddress, isPrivateIP, getIPTypeDescription } from "@/lib/ip-validation";
 import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
@@ -29,7 +31,18 @@ import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 
 interface IPCheckResult {
   ip: string;
-  status: "assigned" | "available" | "reserved";
+  status: "assigned" | "available" | "reserved" | "conflict" | "not_in_database";
+  conflict?: boolean;
+  assignments?: Array<{
+    assignmentId: string;
+    equipmentId: string;
+    equipmentName: string;
+    equipmentType: string;
+    location: string;
+    assignedAt: Date;
+    assignedBy: string;
+  }>;
+  recommendation?: string;
   equipment?: {
     id: string;
     name: string;
@@ -144,6 +157,23 @@ export function IPChecker({
       }
       
       const data = await response.json();
+      
+      // Handle conflict status (multiple assignments to same IP)
+      if (data.status === "conflict" && data.conflict) {
+        setIpCheckResult({
+          ip: ipAddress,
+          status: "conflict",
+          conflict: true,
+          assignments: data.assignments || [],
+          recommendation: data.recommendation,
+          subnet: "N/A",
+          gateway: "N/A",
+          dns: [],
+          createdAt: new Date(),
+          lastModified: new Date()
+        });
+        return;
+      }
       
       if (data.status === "assigned" && data.assignment) {
         // Get real-time equipment status
@@ -337,26 +367,218 @@ export function IPChecker({
 
         {/* IP Check Results */}
         {ipCheckResult && (
-          <div className="mt-6 p-4 border rounded-lg bg-muted/50">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">IP Address Status</h3>
-              <div className="flex items-center space-x-2">
-                <Badge variant={
-                  ipCheckResult.status === "assigned" ? "destructive" : 
-                  ipCheckResult.status === "reserved" ? "secondary" : 
-                  "default"
-                }>
-                  {ipCheckResult.status === "assigned" ? "Assigned" : 
-                   ipCheckResult.status === "reserved" ? "Reserved" : 
-                   "Available"}
-                </Badge>
-                {isPrivateIP(ipCheckResult.ip) && (
-                  <Badge variant="outline" className="text-xs">
-                    Private IP
-                  </Badge>
-                )}
+          <>
+            {/* Not in Database - Show Only This */}
+            {ipCheckResult.status === "not_in_database" ? (
+              <div className="mt-6">
+                {/* Main Alert */}
+                <Card className="border-2 border-orange-300 dark:border-orange-700 bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-950/30 dark:to-yellow-950/30">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start space-x-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/50 flex-shrink-0">
+                        <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-xl text-orange-900 dark:text-orange-100">
+                          IP Address Not in System
+                        </CardTitle>
+                        <CardDescription className="text-orange-700 dark:text-orange-300 mt-1">
+                          <span className="font-mono font-semibold text-lg">{ipCheckResult.ip}</span> is not registered in the database
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-4 bg-white/80 dark:bg-gray-900/50 rounded-lg border border-orange-200 dark:border-orange-800">
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+                        This IP address needs to be added to the system before you can check its availability or assign it to equipment.
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        Choose one of the options below to proceed:
+                      </p>
+                    </div>
+
+                    {/* Option Cards */}
+                    <div className="grid gap-3">
+                      {/* Option 1: Add with Equipment */}
+                      <Card className="border-2 border-blue-200 dark:border-blue-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all cursor-pointer group"
+                            onClick={() => window.location.href = `/equipment?addIP=${encodeURIComponent(ipCheckResult.ip)}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start space-x-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50 group-hover:bg-blue-200 dark:group-hover:bg-blue-800/70 transition-colors flex-shrink-0">
+                              <Plus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                Option 1: Add IP Together with Equipment
+                              </h4>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Go to Equipment Management and add this IP address while creating or editing equipment. 
+                                The IP will be automatically assigned to that equipment.
+                              </p>
+                              <div className="mt-3">
+                                <Button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/equipment?addIP=${encodeURIComponent(ipCheckResult.ip)}`;
+                                  }}
+                                  className="w-full bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Add to Equipment
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Option 2: Add to Database */}
+                      <Card className="border-2 border-green-200 dark:border-green-800 hover:border-green-400 dark:hover:border-green-600 transition-all cursor-pointer group"
+                            onClick={() => window.location.href = `/ip-management?addIP=${encodeURIComponent(ipCheckResult.ip)}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start space-x-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/50 group-hover:bg-green-200 dark:group-hover:bg-green-800/70 transition-colors flex-shrink-0">
+                              <Network className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                                Option 2: Add IP to Database First
+                              </h4>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Go to IP Address Management to add this IP to the system database. 
+                                You can assign it to equipment later when needed.
+                              </p>
+                              <div className="mt-3">
+                                <Button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/ip-management?addIP=${encodeURIComponent(ipCheckResult.ip)}`;
+                                  }}
+                                  className="w-full bg-green-600 hover:bg-green-700"
+                                >
+                                  <Network className="h-4 w-4 mr-2" />
+                                  Add to IP Management
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Helper Info */}
+                    <div className="flex items-start space-x-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-900 dark:text-blue-100">
+                        <strong>Tip:</strong> You can only check availability of IP addresses that already exist in the system database. 
+                        Once added, you'll be able to check their status, view assignments, and manage them from this checker.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-            </div>
+            ) : (
+              /* Show Normal Status for IPs in Database */
+              <div className="mt-6 p-4 border rounded-lg bg-muted/50">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">IP Address Status</h3>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant={
+                      ipCheckResult.status === "conflict" ? "destructive" :
+                      ipCheckResult.status === "assigned" ? "destructive" : 
+                      ipCheckResult.status === "reserved" ? "secondary" : 
+                      "default"
+                    } className={ipCheckResult.status === "conflict" ? "animate-pulse" : ""}>
+                      {ipCheckResult.status === "conflict" ? "🚨 CONFLICT" :
+                       ipCheckResult.status === "assigned" ? "Assigned" : 
+                       ipCheckResult.status === "reserved" ? "Reserved" : 
+                       "Available"}
+                    </Badge>
+                    {isPrivateIP(ipCheckResult.ip) && (
+                      <Badge variant="outline" className="text-xs">
+                        Private IP
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+            {/* Critical Alert for IP Conflicts */}
+            {ipCheckResult.status === "conflict" && ipCheckResult.conflict && (
+              <div className="space-y-4">
+                <div className="p-4 bg-red-100 dark:bg-red-950/30 border-2 border-red-500 rounded-lg animate-pulse">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                    <span className="font-bold text-red-900 dark:text-red-100 text-lg">DATA INTEGRITY VIOLATION</span>
+                  </div>
+                  <p className="text-sm text-red-800 dark:text-red-200 mb-3">
+                    This IP address is assigned to <strong>{ipCheckResult.assignments?.length || 0} different equipment units</strong> simultaneously. 
+                    This violates network integrity and will cause connectivity issues.
+                  </p>
+                  {ipCheckResult.recommendation && (
+                    <p className="text-sm font-medium text-red-900 dark:text-red-100 bg-red-200 dark:bg-red-900/50 p-2 rounded">
+                      💡 {ipCheckResult.recommendation}
+                    </p>
+                  )}
+                </div>
+
+                {/* List all conflicting assignments */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-red-900 dark:text-red-100">Conflicting Assignments:</h4>
+                  {ipCheckResult.assignments?.map((assignment, index) => (
+                    <div 
+                      key={assignment.assignmentId}
+                      className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-300 dark:border-red-800 rounded-lg"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Badge className="bg-red-600">Assignment {index + 1}</Badge>
+                          <span className="font-semibold">{assignment.equipmentName}</span>
+                        </div>
+                        <Badge variant="outline">{assignment.equipmentType}</Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Location:</span>
+                          <p className="font-medium">{assignment.location || "Unknown"}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Assigned By:</span>
+                          <p className="font-medium">{assignment.assignedBy}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Assigned At:</span>
+                          <p className="font-medium">{formatDateForDisplay(new Date(assignment.assignedAt), 'short')}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Equipment ID:</span>
+                          <p className="font-mono text-xs">{assignment.equipmentId}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="destructive" 
+                    className="flex-1"
+                    onClick={() => window.location.href = '/'}
+                  >
+                    <ShieldIcon className="h-4 w-4 mr-2" />
+                    Go to Integrity Monitor
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => handleCheckIP()}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {ipCheckResult.status === "assigned" && ipCheckResult.equipment ? (
               <div className="space-y-4">
@@ -577,7 +799,9 @@ export function IPChecker({
                 </div>
               </div>
             )}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

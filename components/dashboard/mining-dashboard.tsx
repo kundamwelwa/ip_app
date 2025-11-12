@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import { IPChecker } from "@/components/ip/ip-checker";
 import { QuickActions } from "@/components/dashboard/quick-actions";
+import { SystemIntegrityMonitor } from "@/components/dashboard/system-integrity-monitor";
 import { AssignmentDialog, AssignmentFormData } from "@/components/ip/assignment-dialog";
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
 import { ReservationDialog, ReservationFormData } from "@/components/ip/reservation-dialog";
@@ -135,6 +136,7 @@ export function MiningDashboard() {
   const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
   const [unassignIP, setUnassignIP] = useState("");
   const [unassignLoading, setUnassignLoading] = useState(false);
+  const [ipCheckerGlow, setIpCheckerGlow] = useState(false);
 
   const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "info") => {
     const id = Math.random().toString(36).substring(7);
@@ -143,6 +145,15 @@ export function MiningDashboard() {
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
+  const scrollToIPChecker = () => {
+    const ipCheckerElement = document.getElementById("ip-address-checker");
+    if (ipCheckerElement) {
+      ipCheckerElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      setIpCheckerGlow(true);
+      setTimeout(() => setIpCheckerGlow(false), 3000); // Remove glow after 3 seconds
+    }
   };
 
   // Equipment monitoring
@@ -394,7 +405,14 @@ export function MiningDashboard() {
             Welcome to the main Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Real-time monitoring of Rajant mesh network and mining equipment
+            Track which IP addresses are linked to equipment. Type an IP address in the{" "}
+            <button
+              onClick={scrollToIPChecker}
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium underline decoration-2 underline-offset-2 transition-colors cursor-pointer"
+            >
+              IP Address Checker
+            </button>
+            {" "}to get started.
           </p>
         </div>
         {isDashboardFeatureEnabled("showMonitoringControls") && (
@@ -441,20 +459,32 @@ export function MiningDashboard() {
         )}
       </div>
 
+      {/* System Integrity Monitor - CRITICAL ALERTS */}
+      <SystemIntegrityMonitor />
+
       {/* IP Address Checker Section */}
       {isDashboardFeatureEnabled("ipChecker") && (
-        <IPChecker
-          onAssignIP={handleAssignIP}
-          onReserveIP={handleReserveIP}
-          onViewDetails={handleViewDetails}
-          onUnassign={handleUnassign}
-          onRefresh={handleRefresh}
-          onAssignmentComplete={async () => {
-            // This will trigger the IP checker to refresh
-            console.log("Assignment completed, refreshing IP status");
-            await fetchDashboardData();
-          }}
-        />
+        <div
+          id="ip-address-checker"
+          className={`transition-all duration-500 rounded-lg ${
+            ipCheckerGlow
+              ? "ring-4 ring-blue-500 ring-opacity-75 shadow-[0_0_20px_rgba(59,130,246,0.5)] dark:ring-blue-400 dark:shadow-[0_0_20px_rgba(96,165,250,0.5)]"
+              : ""
+          }`}
+        >
+          <IPChecker
+            onAssignIP={handleAssignIP}
+            onReserveIP={handleReserveIP}
+            onViewDetails={handleViewDetails}
+            onUnassign={handleUnassign}
+            onRefresh={handleRefresh}
+            onAssignmentComplete={async () => {
+              // This will trigger the IP checker to refresh
+              console.log("Assignment completed, refreshing IP status");
+              await fetchDashboardData();
+            }}
+          />
+        </div>
       )}
 
       {/* Key Metrics */}

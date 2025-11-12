@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
       description,
       notes,
       nodeId,
+      ipAddresses, // Array of IP addresses to assign
     } = body;
 
     // Convert type to uppercase to match enum
@@ -119,56 +120,190 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create equipment
-    const equipment = await prisma.equipment.create({
-      data: {
-        name,
-        type: equipmentType,
-        model,
-        manufacturer,
-        macAddress,
-        serialNumber,
-        location,
-        operator,
-        description,
-        notes,
-        nodeId,
-        status: "ONLINE",
-      },
-      include: {
-        ipAssignments: {
-          where: { isActive: true },
+    // Validate IP addresses if provided
+    if (ipAddresses && Array.isArray(ipAddresses) && ipAddresses.length > 0) {
+      // Check for duplicate IP addresses in the request
+      const ipAddressValues = ipAddresses.map((ip: any) => ip.address);
+      const uniqueIPs = new Set(ipAddressValues);
+      if (uniqueIPs.size !== ipAddressValues.length) {
+        return NextResponse.json(
+          { error: "Duplicate IP addresses detected in the request" },
+          { status: 400 }
+        );
+      }
+
+      // Check if any IP addresses are already assigned
+      for (const ip of ipAddresses) {
+        if (!ip.address) {
+          return NextResponse.json(
+            { error: "IP address is required for each IP" },
+            { status: 400 }
+          );
+        }
+
+        const existingAssignment = await prisma.iPAssignment.findFirst({
+          where: {
+            ipAddress: { address: ip.address },
+            isActive: true,
+          },
           include: {
-            ipAddress: true,
+            equipment: { select: { name: true } },
+          },
+        });
+
+        if (existingAssignment) {
+          return NextResponse.json(
+            { 
+              error: `IP address ${ip.address} is already assigned to ${existingAssignment.equipment?.name}` 
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Use a transaction to create equipment and assign IP addresses
+    const result = await prisma.$transaction(async (tx) => {
+      // Create equipment
+      const equipment = await tx.equipment.create({
+        data: {
+          name,
+          type: equipmentType,
+          model,
+          manufacturer,
+          macAddress,
+          serialNumber,
+          location,
+          operator,
+          description,
+          notes,
+          nodeId,
+          status: "ONLINE",
+        },
+      });
+
+      // Log equipment creation
+      await tx.auditLog.create({
+        data: {
+          action: "EQUIPMENT_CREATED",
+          entityType: "EQUIPMENT",
+          entityId: equipment.id,
+          userId: session.user.id,
+          equipmentId: equipment.id,
+          details: {
+            name: equipment.name,
+            type: equipment.type,
           },
         },
-      },
-    });
+      });
 
-    // Log the action
-    await prisma.auditLog.create({
-      data: {
-        action: "EQUIPMENT_CREATED",
-        entityType: "EQUIPMENT",
-        entityId: equipment.id,
-        userId: session.user.id,
-        equipmentId: equipment.id,
-        details: {
-          name: equipment.name,
-          type: equipment.type,
+      // Assign IP addresses if provided
+      if (ipAddresses && Array.isArray(ipAddresses) && ipAddresses.length > 0) {
+        for (const ipData of ipAddresses) {
+          // Create or get IP address record
+          let ipAddressRecord = await tx.iPAddress.findUnique({
+            where: { address: ipData.address },
+          });
+
+          if (!ipAddressRecord) {
+            ipAddressRecord = await tx.iPAddress.create({
+              data: {
+                address: ipData.address,
+                subnet: ipData.subnet || "192.168.1.0/24", // Default subnet
+                gateway: ipData.gateway || null,
+                dns: ipData.dns || null,
+                status: "ASSIGNED",
+              },
+            });
+          } else {
+            // Update IP address status to ASSIGNED and update optional fields if provided
+            ipAddressRecord = await tx.iPAddress.update({
+              where: { id: ipAddressRecord.id },
+              data: { 
+                status: "ASSIGNED",
+                subnet: ipData.subnet || ipAddressRecord.subnet,
+                gateway: ipData.gateway || ipAddressRecord.gateway,
+                dns: ipData.dns || ipAddressRecord.dns,
+              },
+            });
+          }
+
+          // Create IP assignment
+          await tx.iPAssignment.create({
+            data: {
+              equipmentId: equipment.id,
+              ipAddressId: ipAddressRecord.id,
+              userId: session.user.id,
+              isActive: true,
+              notes: ipData.notes || null,
+            },
+          });
+
+          // Create audit log for IP assignment
+          await tx.auditLog.create({
+            data: {
+              action: "IP_ASSIGNED",
+              entityType: "IP_ADDRESS",
+              entityId: ipAddressRecord.id,
+              userId: session.user.id,
+              ipAddressId: ipAddressRecord.id,
+              equipmentId: equipment.id,
+              details: {
+                ipAddress: ipData.address,
+                equipmentName: equipment.name,
+                equipmentType: equipment.type,
+                notes: ipData.notes,
+              },
+            },
+          });
+        }
+      }
+
+      // Fetch the complete equipment with IP assignments
+      const completeEquipment = await tx.equipment.findUnique({
+        where: { id: equipment.id },
+        include: {
+          ipAssignments: {
+            where: { isActive: true },
+            include: {
+              ipAddress: true,
+            },
+          },
         },
-      },
+      });
+
+      return completeEquipment;
     });
 
-    // Create alert for admin approval
-    await alertService.alertEquipmentAdded(
-      equipment.id,
-      equipment.name,
-      equipment.type,
-      session.user.id
-    );
+    // Create alerts after transaction is complete (to avoid foreign key constraints)
+    if (result) {
+      try {
+        await alertService.alertEquipmentAdded(
+          result.id,
+          result.name,
+          result.type,
+          session.user.id
+        );
 
-    return NextResponse.json(equipment, { status: 201 });
+        // Create alerts for each IP assignment
+        if (result.ipAssignments && result.ipAssignments.length > 0) {
+          for (const assignment of result.ipAssignments) {
+            await alertService.alertIPAssigned(
+              assignment.ipAddress.id,
+              assignment.ipAddress.address,
+              result.id,
+              result.name,
+              session.user.id
+            );
+          }
+        }
+      } catch (alertError) {
+        // Log alert errors but don't fail the request
+        console.error("Error creating alerts:", alertError);
+      }
+    }
+
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error("Error creating equipment:", error);
     return NextResponse.json(

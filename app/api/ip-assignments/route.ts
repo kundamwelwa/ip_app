@@ -14,6 +14,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { ipAddress, equipmentId, notes } = body;
 
+    console.log("\n" + "=".repeat(80));
+    console.log("🔍 IP ASSIGNMENT REQUEST");
+    console.log("=".repeat(80));
+    console.log(`📍 IP Address: ${ipAddress}`);
+    console.log(`📦 Equipment ID: ${equipmentId}`);
+    console.log(`👤 User: ${session.user.email}`);
+    console.log("=".repeat(80) + "\n");
+
     // Validate required fields
     if (!ipAddress || !equipmentId) {
       return NextResponse.json(
@@ -22,20 +30,96 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if IP address is already assigned
+    // CRITICAL: Multi-layer check to prevent duplicate IP assignments
+    
+    console.log("🔍 Layer 1: Checking for existing active assignments...");
+    
+    // Layer 1: Check active assignments by IP address string
     const existingAssignment = await prisma.iPAssignment.findFirst({
       where: {
         ipAddress: {
           address: ipAddress
         },
         isActive: true
+      },
+      include: {
+        equipment: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            location: true
+          }
+        },
+        ipAddress: {
+          select: {
+            address: true,
+            status: true
+          }
+        }
       }
     });
 
+    console.log(`   Result: ${existingAssignment ? 'FOUND existing assignment' : 'No existing assignment'}`);
     if (existingAssignment) {
+      console.log(`   - Assigned to: ${existingAssignment.equipment?.name} (ID: ${existingAssignment.equipment?.id})`);
+      console.log(`   - Assignment ID: ${existingAssignment.id}`);
+      console.log(`   - Assigned At: ${existingAssignment.assignedAt.toISOString()}`);
+    }
+
+    if (existingAssignment) {
+      console.error(`\n🚨 CRITICAL: IP Assignment Conflict Detected!`);
+      console.error(`IP ${ipAddress} is already assigned to ${existingAssignment.equipment?.name} (ID: ${existingAssignment.equipment?.id})`);
+      console.error(`Attempting to assign to equipment ID: ${equipmentId}`);
+      console.error(`BLOCKING THIS ASSIGNMENT!\n`);
+      
       return NextResponse.json(
-        { error: "IP address is already assigned to equipment" },
-        { status: 400 }
+        { 
+          error: `ASSIGNMENT BLOCKED: IP address ${ipAddress} is already assigned to "${existingAssignment.equipment?.name}" at location "${existingAssignment.equipment?.location || 'Unknown'}". One IP address cannot be assigned to multiple equipment. Please unassign it first or use a different IP address.`,
+          conflictDetails: {
+            currentEquipment: existingAssignment.equipment,
+            assignedAt: existingAssignment.assignedAt,
+            assignmentId: existingAssignment.id
+          }
+        },
+        { status: 409 } // 409 Conflict
+      );
+    }
+    
+    console.log("✅ Layer 1 passed - no existing assignment found\n");
+
+    // Layer 2: Check if the IP record exists and has status ASSIGNED
+    const ipRecord = await prisma.iPAddress.findUnique({
+      where: { address: ipAddress },
+      include: {
+        assignments: {
+          where: { isActive: true },
+          include: {
+            equipment: {
+              select: {
+                name: true,
+                location: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (ipRecord && ipRecord.status === "ASSIGNED" && ipRecord.assignments.length > 0) {
+      const activeAssignment = ipRecord.assignments[0];
+      console.error(`🚨 CRITICAL: IP Status Check Failed!`);
+      console.error(`IP ${ipAddress} has status ASSIGNED with ${ipRecord.assignments.length} active assignment(s)`);
+      
+      return NextResponse.json(
+        { 
+          error: `ASSIGNMENT BLOCKED: IP address ${ipAddress} is currently assigned to "${activeAssignment.equipment?.name}". Cannot assign the same IP to multiple equipment.`,
+          conflictDetails: {
+            currentEquipment: activeAssignment.equipment,
+            activeAssignments: ipRecord.assignments.length
+          }
+        },
+        { status: 409 } // 409 Conflict
       );
     }
 
@@ -51,20 +135,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create IP address if it doesn't exist
-    let ipAddressRecord = await prisma.iPAddress.findUnique({
-      where: { address: ipAddress }
-    });
+    // Use ipRecord from Layer 2 check or create if it doesn't exist
+    let ipAddressRecord;
 
-    if (!ipAddressRecord) {
-      ipAddressRecord = await prisma.iPAddress.create({
+    if (ipRecord) {
+      ipAddressRecord = ipRecord;
+    } else {
+      // Create new IP address record if it doesn't exist
+      const newRecord = await prisma.iPAddress.create({
         data: {
           address: ipAddress,
           subnet: "192.168.1.0/24", // Default subnet, can be made configurable
           gateway: "192.168.1.1", // Default gateway, can be made configurable
-          dns: "8.8.8.8,8.8.4.4" // Default DNS, can be made configurable
+          dns: "8.8.8.8,8.8.4.4", // Default DNS, can be made configurable
+          status: "AVAILABLE"
         }
       });
+
+      // Fetch with assignments to match the type
+      ipAddressRecord = await prisma.iPAddress.findUnique({
+        where: { id: newRecord.id },
+        include: {
+          assignments: {
+            where: { isActive: true },
+            include: {
+              equipment: {
+                select: {
+                  name: true,
+                  location: true
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Ensure ipAddressRecord exists at this point
+    if (!ipAddressRecord) {
+      return NextResponse.json(
+        { error: "Failed to create or retrieve IP address record" },
+        { status: 500 }
+      );
     }
 
     // Create IP assignment
@@ -173,22 +285,54 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const ipAddress = searchParams.get("ip");
+    const assignmentId = searchParams.get("assignmentId");
+    const ipAddressId = searchParams.get("ipAddressId");
+    const equipmentId = searchParams.get("equipmentId");
 
-    if (!ipAddress) {
-      return NextResponse.json(
-        { error: "IP address is required" },
-        { status: 400 }
-      );
-    }
+    console.log("\n" + "=".repeat(80));
+    console.log("🗑️  DELETE IP ASSIGNMENT REQUEST");
+    console.log("=".repeat(80));
+    console.log(`📍 Parameters:`);
+    console.log(`   - ip: ${ipAddress}`);
+    console.log(`   - assignmentId: ${assignmentId}`);
+    console.log(`   - ipAddressId: ${ipAddressId}`);
+    console.log(`   - equipmentId: ${equipmentId}`);
+    console.log("=".repeat(80) + "\n");
 
-    // Find and deactivate the assignment
-    const assignment = await prisma.iPAssignment.findFirst({
-      where: {
+    // Build where clause based on provided parameters
+    let whereClause: any = { isActive: true };
+
+    if (assignmentId) {
+      // Delete by assignment ID (most direct)
+      whereClause = { id: assignmentId, isActive: true };
+    } else if (ipAddressId && equipmentId) {
+      // Delete by IP ID + Equipment ID combination
+      whereClause = {
+        ipAddressId,
+        equipmentId,
+        isActive: true
+      };
+    } else if (ipAddress) {
+      // Delete by IP address string
+      whereClause = {
         ipAddress: {
           address: ipAddress
         },
         isActive: true
-      },
+      };
+    } else {
+      console.error("❌ No valid parameters provided\n");
+      return NextResponse.json(
+        { error: "Either assignmentId, (ipAddressId + equipmentId), or ip address is required" },
+        { status: 400 }
+      );
+    }
+
+    // Find the assignment
+    console.log("🔍 Searching for assignment with where clause:", JSON.stringify(whereClause, null, 2));
+    
+    const assignment = await prisma.iPAssignment.findFirst({
+      where: whereClause,
       include: {
         equipment: true,
         ipAddress: true
@@ -196,13 +340,22 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!assignment) {
+      console.error("❌ No active assignment found\n");
       return NextResponse.json(
-        { error: "No active assignment found for this IP address" },
+        { error: "No active assignment found with the provided parameters" },
         { status: 404 }
       );
     }
 
+    console.log(`✅ Found assignment:`);
+    console.log(`   - Assignment ID: ${assignment.id}`);
+    console.log(`   - IP Address: ${assignment.ipAddress.address}`);
+    console.log(`   - Equipment: ${assignment.equipment?.name || 'Unknown'}`);
+    console.log(`   - Equipment ID: ${assignment.equipmentId}`);
+    console.log("");
+
     // Deactivate the assignment
+    console.log("🔄 Deactivating assignment...");
     await prisma.iPAssignment.update({
       where: { id: assignment.id },
       data: { 
@@ -210,14 +363,34 @@ export async function DELETE(request: NextRequest) {
         releasedAt: new Date()
       }
     });
+    console.log("✅ Assignment deactivated");
 
-    // Update IP address status back to AVAILABLE
-    await prisma.iPAddress.update({
-      where: { id: assignment.ipAddressId },
-      data: { 
-        status: "AVAILABLE"
+    // Check if there are any OTHER active assignments for this IP
+    const otherActiveAssignments = await prisma.iPAssignment.findMany({
+      where: {
+        ipAddressId: assignment.ipAddressId,
+        isActive: true,
+        id: { not: assignment.id } // Exclude the one we just deactivated (in case of race conditions)
       }
     });
+
+    console.log(`🔍 Checking for other active assignments: ${otherActiveAssignments.length} found`);
+
+    // Only mark IP as AVAILABLE if there are NO other active assignments
+    if (otherActiveAssignments.length === 0) {
+      console.log("✅ No other assignments - marking IP as AVAILABLE");
+      await prisma.iPAddress.update({
+        where: { id: assignment.ipAddressId },
+        data: { 
+          status: "AVAILABLE"
+        }
+      });
+    } else {
+      console.log(`⚠️  IP still has ${otherActiveAssignments.length} other active assignment(s) - keeping status as ASSIGNED`);
+      otherActiveAssignments.forEach((a, idx) => {
+        console.log(`   ${idx + 1}. Equipment ID: ${a.equipmentId}, Assignment ID: ${a.id}`);
+      });
+    }
 
     // Create audit log for the unassignment
     await prisma.auditLog.create({
@@ -248,9 +421,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    console.log("✅ IP assignment removed successfully");
+    console.log("=".repeat(80) + "\n");
+
     return NextResponse.json({
       success: true,
-      message: "IP assignment removed successfully"
+      message: "IP assignment removed successfully",
+      unassignedIP: assignment.ipAddress.address,
+      equipment: assignment.equipment?.name
     });
 
   } catch (error) {

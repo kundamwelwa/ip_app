@@ -32,6 +32,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Toast } from "@/components/ui/toast";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useConfirmation } from "@/hooks/use-confirmation";
 import { 
   Search, 
   Plus, 
@@ -115,6 +119,10 @@ export function IPAssignmentDashboard() {
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
   const [selectedIP, setSelectedIP] = useState<IPAddress | null>(null);
+
+  // Toast and Confirmation hooks
+  const { toast, hideToast, showSuccess, showError, showWarning } = useToast();
+  const { confirmation, showConfirmation, hideConfirmation, confirm } = useConfirmation();
 
   // Equipment data from API
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -428,37 +436,46 @@ export function IPAssignmentDashboard() {
   };
 
   const handleUnassignIP = (equipmentItem: Equipment) => {
-    if (confirm(`Are you sure you want to unassign IP address from ${equipmentItem.name}?`)) {
-      // Update equipment to remove IP address
-      const updatedEquipment = equipment.map(eq => 
-        eq.id === equipmentItem.id 
-          ? { ...eq, ipAddress: undefined, macAddress: undefined }
-          : eq
-      );
+    showConfirmation({
+      title: "Unassign IP Address",
+      description: `This will unassign the IP address from ${equipmentItem.name}. Are you sure you want to proceed?`,
+      confirmText: "Unassign",
+      variant: "warning",
+      itemName: equipmentItem.ipAddress || "Unknown IP",
+      onConfirm: () => {
+        // Update equipment to remove IP address
+        const updatedEquipment = equipment.map(eq => 
+          eq.id === equipmentItem.id 
+            ? { ...eq, ipAddress: undefined, macAddress: undefined }
+            : eq
+        );
 
-      // Update IP address status
-      const updatedIPs = ipAddresses.map(ip => 
-        ip.assignedTo === equipmentItem.name 
-          ? { 
-              ...ip, 
-              status: "available" as const,
-              assignedTo: undefined,
-              equipmentId: undefined,
-              equipmentName: undefined,
-              equipmentType: undefined,
-              location: undefined,
-              assignedBy: undefined,
-              assignedAt: undefined,
-              lastSeen: undefined,
-              updatedAt: new Date()
-            }
-          : ip
-      );
+        // Update IP address status
+        const updatedIPs = ipAddresses.map(ip => 
+          ip.assignedTo === equipmentItem.name 
+            ? { 
+                ...ip, 
+                status: "available" as const,
+                assignedTo: undefined,
+                equipmentId: undefined,
+                equipmentName: undefined,
+                equipmentType: undefined,
+                location: undefined,
+                assignedBy: undefined,
+                assignedAt: undefined,
+                lastSeen: undefined,
+                updatedAt: new Date()
+              }
+            : ip
+        );
 
-      setEquipment(updatedEquipment);
-      setIPAddresses(updatedIPs);
-    }
+        setEquipment(updatedEquipment);
+        setIPAddresses(updatedIPs);
+        showSuccess(`IP address unassigned from ${equipmentItem.name} successfully`);
+      },
+    });
   };
+  
 
   const handleRequestAssignment = () => {
     const newRequest: AssignmentRequest = {
@@ -1079,6 +1096,30 @@ export function IPAssignmentDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
+
+      {/* Confirmation Dialog */}
+      {confirmation && (
+        <ConfirmationDialog
+          isOpen={confirmation.isOpen}
+          onClose={hideConfirmation}
+          onConfirm={confirm}
+          title={confirmation.title}
+          description={confirmation.description}
+          confirmText={confirmation.confirmText}
+          cancelText={confirmation.cancelText}
+          variant={confirmation.variant}
+          itemName={confirmation.itemName}
+        />
+      )}
     </div>
   );
 }

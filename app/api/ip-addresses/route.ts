@@ -19,15 +19,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "10");
 
     // Build where clause
-    const where: {
-      status?: string;
-      subnet?: string;
-      OR?: Array<{
-        address?: { contains: string; mode: "insensitive" };
-        notes?: { contains: string; mode: "insensitive" };
-      }>;
-    } = {};
-    if (status) where.status = status;
+    const where: any = {};
+    if (status) where.status = status.toUpperCase() as any;
     if (subnet) where.subnet = subnet;
     if (search) {
       where.OR = [
@@ -50,6 +43,7 @@ export async function GET(request: NextRequest) {
                   name: true,
                   type: true,
                   status: true,
+                  location: true,
                 },
               },
               user: {
@@ -178,6 +172,109 @@ export async function POST(request: NextRequest) {
     console.error("Error creating IP address:", error);
     return NextResponse.json(
       { error: "Failed to create IP address" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/ip-addresses - Delete an IP address
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const ipId = searchParams.get("id");
+    const ipAddress = searchParams.get("address");
+
+    if (!ipId && !ipAddress) {
+      return NextResponse.json(
+        { error: "IP ID or address is required" },
+        { status: 400 }
+      );
+    }
+
+    // Find the IP address
+    const ip = await prisma.iPAddress.findFirst({
+      where: ipId ? { id: ipId } : { address: ipAddress! },
+      include: {
+        assignments: {
+          where: { isActive: true },
+          include: {
+            equipment: {
+              select: {
+                name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!ip) {
+      return NextResponse.json(
+        { error: "IP address not found" },
+        { status: 404 }
+      );
+    }
+
+    // Check if IP has active assignments
+    if (ip.assignments && ip.assignments.length > 0) {
+      return NextResponse.json(
+        { 
+          error: `Cannot delete IP ${ip.address}. It has ${ip.assignments.length} active assignment(s). Please unassign it first.`,
+          activeAssignments: ip.assignments.map(a => ({
+            equipmentName: a.equipment?.name,
+            assignedAt: a.assignedAt
+          }))
+        },
+        { status: 400 }
+      );
+    }
+
+    // Delete the IP address
+    await prisma.iPAddress.delete({
+      where: { id: ip.id }
+    });
+
+    // Log the action
+    await prisma.auditLog.create({
+      data: {
+        action: "IP_ADDRESS_DELETED",
+        entityType: "IP_ADDRESS",
+        entityId: ip.id,
+        userId: session.user.id,
+        details: {
+          address: ip.address,
+          subnet: ip.subnet,
+          deletedAt: new Date().toISOString()
+        }
+      }
+    });
+
+    return NextResponse.json({
+      message: `IP address ${ip.address} deleted successfully`,
+      deletedIP: {
+        id: ip.id,
+        address: ip.address
+      }
+    });
+
+  } catch (error: any) {
+    console.error("Error deleting IP address:", error);
+    
+    // Handle foreign key constraint errors
+    if (error.code === 'P2003') {
+      return NextResponse.json(
+        { error: "Cannot delete IP address. It has related records. Please unassign it first." },
+        { status: 400 }
+      );
+    }
+    
+    return NextResponse.json(
+      { error: "Failed to delete IP address" },
       { status: 500 }
     );
   }

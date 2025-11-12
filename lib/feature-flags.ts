@@ -30,6 +30,7 @@ export const dashboardFeatures = {
   showNetworkTab: false,             // Hidden for now
   showMonitoringControls: false,     // Hidden for now (Start/Stop monitor buttons)
   showRealTimeCheckButton: false,    // Hidden for now
+  showRealTimeNetworkStatus: false,  // Hidden for now (Real-time network performance monitoring)
 } as const;
 
 // Sidebar Feature Flags
@@ -161,5 +162,30 @@ export const userFeatures = {
  */
 export function isUserFeatureEnabled(feature: keyof typeof userFeatures): boolean {
   return userFeatures[feature] === true;
+}
+
+// IP Address Management Feature Flags
+export const ipAddressFeatures = {
+  // IP Address Fields
+  showSubnetField: false,         // Hidden for now
+  showGatewayField: false,        // Hidden for now
+  showDNSField: false,            // Hidden for now
+  showNotesField: true,           // Allow notes for each IP
+  
+  // Advanced Features
+  requireSubnet: false,           // Don't require subnet
+  requireGateway: false,          // Don't require gateway
+  requireDNS: false,              // Don't require DNS
+  
+  // UI Features
+  allowRemoveIP: true,            // Allow removing individual IPs from multi-IP equipment
+  showIPDetails: false,           // Show subnet, gateway, DNS in IP display
+} as const;
+
+/**
+ * Check if an IP address feature is enabled
+ */
+export function isIPAddressFeatureEnabled(feature: keyof typeof ipAddressFeatures): boolean {
+  return ipAddressFeatures[feature] === true;
 }
 

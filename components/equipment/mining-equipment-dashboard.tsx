@@ -53,6 +53,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -62,11 +67,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportExportDialog } from "./import-export-dialog";
-import { MiningEquipment, EquipmentFormData } from "@/types/equipment";
+import { IPAddressFields } from "./ip-address-fields";
+import { MiningEquipment, EquipmentFormData, IPAddressInput } from "@/types/equipment";
 import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
 import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
 import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 import { isEquipmentFeatureEnabled } from "@/lib/feature-flags";
+import { Switch } from "@/components/ui/switch";
 
 // Equipment types and form data are now imported from types/equipment.ts
 
@@ -82,6 +89,14 @@ export function MiningEquipmentDashboard() {
   const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<MiningEquipment | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Custom alerts and confirmation dialogs
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; equipmentId: string | null; equipmentName: string | null }>({
+    isOpen: false,
+    equipmentId: null,
+    equipmentName: null,
+  });
   
   // Real-time monitoring
   const {
@@ -108,7 +123,36 @@ export function MiningEquipmentDashboard() {
     operator: "",
     notes: "",
     status: "ONLINE",
+    assignIPsOnCreation: false,
+    numberOfIPs: 1,
+    ipAddresses: [],
   });
+
+  // Initialize IP addresses when assignIPsOnCreation changes
+  const initializeIPAddresses = (count: number): IPAddressInput[] => {
+    return Array.from({ length: count }, () => ({
+      address: "",
+      subnet: "",
+      gateway: "",
+      dns: "",
+      notes: "",
+    }));
+  };
+
+  // Helper function to show toast messages
+  const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ message, type });
+  };
+
+  // Auto-hide toast after 5 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   // Equipment types for dropdown
   const equipmentTypes = [
@@ -143,11 +187,37 @@ export function MiningEquipmentDashboard() {
 
   useEffect(() => {
     fetchEquipmentData();
+  }, []);
+
+  // Check for addIP URL parameter and automatically open add dialog
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ipToAdd = urlParams.get('addIP');
     
-    // Set up real-time updates every 60 seconds
-    const interval = setInterval(() => fetchEquipmentData(true), 60000);
-    
-    return () => clearInterval(interval);
+    if (ipToAdd) {
+      // Open the add dialog
+      setIsAddDialogOpen(true);
+      
+      // Pre-configure for IP assignment
+      setFormData(prev => ({
+        ...prev,
+        assignIPsOnCreation: true,
+        numberOfIPs: 1,
+        ipAddresses: [{
+          address: ipToAdd,
+          subnet: "",
+          gateway: "",
+          dns: "",
+          notes: "",
+        }],
+      }));
+
+      // Show toast message
+      showToast(`Ready to add IP ${ipToAdd} with new equipment`, "info");
+
+      // Clean up URL
+      window.history.replaceState({}, '', '/equipment');
+    }
   }, []);
 
   // Handle real-time refresh
@@ -226,10 +296,16 @@ export function MiningEquipmentDashboard() {
     }).length;
   };
 
-  // Get IP assignment for equipment
-  const getIPAssignment = (equipmentId: string) => {
+  // Get all IP assignments for equipment
+  const getIPAssignments = (equipmentId: string) => {
     const equipmentItem = equipment.find(eq => eq.id === equipmentId);
-    return equipmentItem?.ipAssignments?.[0]?.ipAddress?.address || "Not assigned";
+    return equipmentItem?.ipAssignments?.map(assignment => assignment.ipAddress) || [];
+  };
+
+  // Get IP assignment for equipment (for backwards compatibility with stats cards)
+  const getIPAssignment = (equipmentId: string) => {
+    const ips = getIPAssignments(equipmentId);
+    return ips.length > 0 ? ips[0].address : "Not assigned";
   };
 
   // Handle IP assignment
@@ -256,6 +332,15 @@ export function MiningEquipmentDashboard() {
 
   const handleAddEquipment = async () => {
     try {
+      // Validate IP addresses if being assigned
+      if (formData.assignIPsOnCreation && formData.ipAddresses && formData.ipAddresses.length > 0) {
+        const invalidIPs = formData.ipAddresses.filter(ip => !ip.address);
+        if (invalidIPs.length > 0) {
+          showToast("Please fill in all required IP address fields (IP Address).", "error");
+          return;
+        }
+      }
+
       const response = await fetch("/api/equipment", {
         method: "POST",
         headers: {
@@ -272,20 +357,24 @@ export function MiningEquipmentDashboard() {
           operator: formData.operator,
           notes: formData.notes,
           status: formData.status,
+          // Include IP addresses if being assigned
+          ipAddresses: formData.assignIPsOnCreation ? formData.ipAddresses : undefined,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to add equipment");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to add equipment");
       }
 
       const newEquipment = await response.json();
       setEquipment([...(equipment || []), newEquipment]);
       setIsAddDialogOpen(false);
       resetForm();
+      showToast(`Equipment "${newEquipment.name}" added successfully!`, "success");
     } catch (error) {
       console.error("Failed to add equipment:", error);
-      alert("Failed to add equipment. Please try again.");
+      showToast(error instanceof Error ? error.message : "Failed to add equipment. Please try again.", "error");
     }
   };
 
@@ -303,6 +392,9 @@ export function MiningEquipmentDashboard() {
       operator: item.operator || "",
       notes: item.notes || "",
       status: item.status,
+      assignIPsOnCreation: false,
+      numberOfIPs: 1,
+      ipAddresses: [],
     });
     setIsEditDialogOpen(true);
   };
@@ -341,28 +433,41 @@ export function MiningEquipmentDashboard() {
       setIsEditDialogOpen(false);
       setEditingEquipment(null);
       resetForm();
+      showToast(`Equipment "${updatedEquipment.name}" updated successfully!`, "success");
     } catch (error) {
       console.error("Failed to update equipment:", error);
-      alert("Failed to update equipment. Please try again.");
+      showToast("Failed to update equipment. Please try again.", "error");
     }
   };
 
-  const handleDeleteEquipment = async (id: string) => {
-    if (confirm("Are you sure you want to delete this equipment?")) {
-      try {
-        const response = await fetch(`/api/equipment/${id}`, {
-          method: "DELETE",
-        });
+  const handleDeleteClick = (item: MiningEquipment) => {
+    setDeleteConfirmation({
+      isOpen: true,
+      equipmentId: item.id,
+      equipmentName: item.name,
+    });
+  };
 
-        if (!response.ok) {
-          throw new Error("Failed to delete equipment");
-        }
+  const handleDeleteEquipment = async () => {
+    if (!deleteConfirmation.equipmentId) return;
 
-        setEquipment((equipment || []).filter(item => item.id !== id));
-      } catch (error) {
-        console.error("Failed to delete equipment:", error);
-        alert("Failed to delete equipment. Please try again.");
+    try {
+      const response = await fetch(`/api/equipment/${deleteConfirmation.equipmentId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete equipment");
       }
+
+      setEquipment((equipment || []).filter(item => item.id !== deleteConfirmation.equipmentId));
+      setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null });
+      showToast(`Equipment "${deleteConfirmation.equipmentName}" deleted successfully!`, "success");
+    } catch (error) {
+      console.error("Failed to delete equipment:", error);
+      showToast(error instanceof Error ? error.message : "Failed to delete equipment. Please try again.", "error");
+      setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null });
     }
   };
 
@@ -383,6 +488,9 @@ export function MiningEquipmentDashboard() {
       operator: "",
       notes: "",
       status: "ONLINE",
+      assignIPsOnCreation: false,
+      numberOfIPs: 1,
+      ipAddresses: [],
     });
   };
 
@@ -526,11 +634,11 @@ export function MiningEquipmentDashboard() {
                 <span className="hidden sm:inline">Add Equipment</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Equipment</DialogTitle>
                 <DialogDescription>
-                  Add a new piece of mining equipment to the system. IP and MAC addresses can be assigned later.
+                  Add a new piece of mining equipment to the system. You can optionally assign IP addresses during creation.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -593,17 +701,6 @@ export function MiningEquipmentDashboard() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="ipAddress">IP Address (Optional)</Label>
-                    <Input
-                      id="ipAddress"
-                      value={formData.ipAddress}
-                      onChange={(e) => setFormData({...formData, ipAddress: e.target.value})}
-                      placeholder="Will be assigned later if not provided"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
                     <Label htmlFor="macAddress">MAC Address (Optional)</Label>
                     <Input
                       id="macAddress"
@@ -612,15 +709,15 @@ export function MiningEquipmentDashboard() {
                       placeholder="Will be assigned later if not provided"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
-                    <Input
-                      id="location"
-                      value={formData.location}
-                      onChange={(e) => setFormData({...formData, location: e.target.value})}
-                      placeholder="e.g., Pit A - Level 3"
-                    />
-                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="location">Location</Label>
+                  <Input
+                    id="location"
+                    value={formData.location}
+                    onChange={(e) => setFormData({...formData, location: e.target.value})}
+                    placeholder="e.g., Pit A - Level 3"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="operator">Operator</Label>
@@ -640,6 +737,73 @@ export function MiningEquipmentDashboard() {
                     placeholder="Additional notes about the equipment..."
                     rows={3}
                   />
+                </div>
+
+                {/* IP Address Assignment Section */}
+                <div className="border-t pt-4 mt-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="space-y-1">
+                      <Label className="text-base font-semibold">IP Address Assignment</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Optionally assign one or more IP addresses to this equipment during creation.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.assignIPsOnCreation}
+                      onCheckedChange={(checked: boolean) => {
+                        setFormData({
+                          ...formData,
+                          assignIPsOnCreation: checked,
+                          ipAddresses: checked ? initializeIPAddresses(formData.numberOfIPs || 1) : [],
+                        });
+                      }}
+                    />
+                  </div>
+
+                  {formData.assignIPsOnCreation && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="space-y-2 flex-1">
+                          <Label htmlFor="numberOfIPs">Number of IP Addresses</Label>
+                          <Select
+                            value={String(formData.numberOfIPs || 1)}
+                            onValueChange={(value) => {
+                              const count = parseInt(value);
+                              setFormData({
+                                ...formData,
+                                numberOfIPs: count,
+                                ipAddresses: initializeIPAddresses(count),
+                              });
+                            }}
+                          >
+                            <SelectTrigger id="numberOfIPs">
+                              <SelectValue placeholder="Select number" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[1, 2, 3, 4, 5].map((num) => (
+                                <SelectItem key={num} value={String(num)}>
+                                  {num} {num === 1 ? "IP Address" : "IP Addresses"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <IPAddressFields
+                        ipAddresses={formData.ipAddresses || []}
+                        onChange={(ipAddresses) => setFormData({ ...formData, ipAddresses })}
+                        onRemove={(index) => {
+                          const updated = formData.ipAddresses?.filter((_, i) => i !== index) || [];
+                          setFormData({
+                            ...formData,
+                            ipAddresses: updated,
+                            numberOfIPs: updated.length,
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
@@ -887,29 +1051,99 @@ export function MiningEquipmentDashboard() {
                     <Badge variant="outline">{item.type}</Badge>
                   </TableCell>
                   <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-sm">{getIPAssignment(item.id)}</span>
-                        {getIPAssignment(item.id) !== "Not assigned" ? (
+                    {(() => {
+                      const ipAddresses = getIPAssignments(item.id);
+                      if (ipAddresses.length === 0) {
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-muted-foreground">Not assigned</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAssignIP(item.id)}
+                              className="h-6 w-6 p-0"
+                              title="Assign IP Address"
+                            >
+                              <Link className="h-3 w-3 text-green-500" />
+                            </Button>
+                          </div>
+                        );
+                      }
+                      
+                      if (ipAddresses.length === 1) {
+                        return (
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {ipAddresses[0].address}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUnassignIP(item.id)}
+                              className="h-6 w-6 p-0"
+                              title="Unassign IP Address"
+                            >
+                              <Unlink className="h-3 w-3 text-red-500" />
+                            </Button>
+                          </div>
+                        );
+                      }
+                      
+                      // Multiple IP addresses - show first one with indicator
+                      return (
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {ipAddresses[0].address}
+                          </Badge>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:bg-accent hover:text-accent-foreground h-6 px-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600">
+                                <Network className="h-3 w-3 mr-1" />
+                                +{ipAddresses.length - 1} more
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80" align="start">
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                                    <Network className="h-4 w-4 text-blue-500" />
+                                    All IP Addresses ({ipAddresses.length})
+                                  </h4>
+                                </div>
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {ipAddresses.map((ip, index) => (
+                                    <div 
+                                      key={ip.id} 
+                                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 text-xs font-semibold">
+                                          {index + 1}
+                                        </div>
+                                        <span className="font-mono text-sm font-medium">{ip.address}</span>
+                                      </div>
+                                      <Badge variant="outline" className="text-xs">
+                                        {ip.status}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleUnassignIP(item.id)}
                             className="h-6 w-6 p-0"
+                            title="Manage IP Addresses"
                           >
                             <Unlink className="h-3 w-3 text-red-500" />
                           </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleAssignIP(item.id)}
-                            className="h-6 w-6 p-0"
-                          >
-                            <Link className="h-3 w-3 text-green-500" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
                     {isEquipmentFeatureEnabled("showRealTimeStatusColumn") && (
                       <TableCell>
                         <div className="flex items-center space-x-2">
@@ -990,7 +1224,7 @@ export function MiningEquipmentDashboard() {
                       <Button
                           variant="ghost"
                         size="sm"
-                        onClick={() => handleDeleteEquipment(item.id)}
+                        onClick={() => handleDeleteClick(item)}
                           className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
                           title="Delete Equipment"
                       >
@@ -1009,11 +1243,11 @@ export function MiningEquipmentDashboard() {
 
       {/* Edit Equipment Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Equipment</DialogTitle>
             <DialogDescription>
-              Update equipment information.
+              Update equipment information. IP addresses are managed separately.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -1024,6 +1258,7 @@ export function MiningEquipmentDashboard() {
                   id="edit-name"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  placeholder="e.g., Haul Truck CAT 797F"
                 />
               </div>
               <div className="space-y-2">
@@ -1047,6 +1282,7 @@ export function MiningEquipmentDashboard() {
                   id="edit-model"
                   value={formData.model}
                   onChange={(e) => setFormData({...formData, model: e.target.value})}
+                  placeholder="e.g., 797F"
                 />
               </div>
               <div className="space-y-2">
@@ -1070,34 +1306,27 @@ export function MiningEquipmentDashboard() {
                   id="edit-serialNumber"
                   value={formData.serialNumber}
                   onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+                  placeholder="e.g., CAT797F-001"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-ipAddress">IP Address</Label>
-                <Input
-                  id="edit-ipAddress"
-                  value={formData.ipAddress}
-                  onChange={(e) => setFormData({...formData, ipAddress: e.target.value})}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-macAddress">MAC Address</Label>
+                <Label htmlFor="edit-macAddress">MAC Address (Optional)</Label>
                 <Input
                   id="edit-macAddress"
                   value={formData.macAddress}
                   onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
+                  placeholder="Will be assigned later if not provided"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-location">Location</Label>
-                <Input
-                  id="edit-location"
-                  value={formData.location}
-                  onChange={(e) => setFormData({...formData, location: e.target.value})}
-                />
-              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-location">Location</Label>
+              <Input
+                id="edit-location"
+                value={formData.location}
+                onChange={(e) => setFormData({...formData, location: e.target.value})}
+                placeholder="e.g., Pit A - Level 3"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-operator">Operator</Label>
@@ -1105,6 +1334,7 @@ export function MiningEquipmentDashboard() {
                 id="edit-operator"
                 value={formData.operator}
                 onChange={(e) => setFormData({...formData, operator: e.target.value})}
+                placeholder="e.g., John Smith"
               />
             </div>
             <div className="space-y-2">
@@ -1113,6 +1343,7 @@ export function MiningEquipmentDashboard() {
                 id="edit-notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                placeholder="Additional notes about the equipment..."
                 rows={3}
               />
             </div>
@@ -1138,6 +1369,97 @@ export function MiningEquipmentDashboard() {
         onImport={handleImportEquipment}
         equipment={equipment}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmation.isOpen} onOpenChange={(open) => {
+        if (!open) {
+          setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null });
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px] border-2 border-red-200 dark:border-red-900">
+          <DialogHeader>
+            <div className="flex items-center space-x-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/30">
+                <AlertTriangle className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl">Delete Equipment</DialogTitle>
+                <DialogDescription className="text-base mt-1">
+                  This action cannot be undone
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete <span className="font-semibold text-foreground">{deleteConfirmation.equipmentName}</span>?
+            </p>
+            <div className="mt-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+              <p className="text-sm text-red-900 dark:text-red-100">
+                ⚠️ This equipment will be permanently removed from the system.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteEquipment}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Equipment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
+          <Card className={`min-w-[300px] shadow-lg border-2 ${
+            toast.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
+            toast.type === "error" ? "border-red-500 bg-red-50 dark:bg-red-950/30" :
+            "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+          }`}>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-start space-x-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                  toast.type === "success" ? "bg-green-100 dark:bg-green-950/50" :
+                  toast.type === "error" ? "bg-red-100 dark:bg-red-950/50" :
+                  "bg-blue-100 dark:bg-blue-950/50"
+                }`}>
+                  {toast.type === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
+                  {toast.type === "error" && <XCircle className="h-5 w-5 text-red-600" />}
+                  {toast.type === "info" && <AlertTriangle className="h-5 w-5 text-blue-600" />}
+                </div>
+                <div className="flex-1">
+                  <p className={`text-sm font-medium ${
+                    toast.type === "success" ? "text-green-900 dark:text-green-100" :
+                    toast.type === "error" ? "text-red-900 dark:text-red-100" :
+                    "text-blue-900 dark:text-blue-100"
+                  }`}>
+                    {toast.message}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setToast(null)}
+                >
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       
       {/* Debug info */}
       {process.env.NODE_ENV === 'development' && (

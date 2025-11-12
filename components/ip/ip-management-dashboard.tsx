@@ -59,6 +59,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
+import { Toast } from "@/components/ui/toast";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useConfirmation } from "@/hooks/use-confirmation";
 
 // Types
 interface IPAddress {
@@ -147,6 +151,10 @@ export function IPManagementDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [equipmentList, setEquipmentList] = useState<Array<{ id: string; name: string; type: string }>>([]);
+
+  // Toast and Confirmation hooks
+  const { toast, hideToast, showSuccess, showError, showWarning } = useToast();
+  const { confirmation, showConfirmation, hideConfirmation, confirm } = useConfirmation();
 
   // Real data from API
   const [ipAddresses, setIPAddresses] = useState<IPAddress[]>([]);
@@ -244,33 +252,48 @@ export function IPManagementDashboard() {
   // Fetch audit logs
   const fetchAuditLogs = async () => {
     try {
-      const response = await fetch("/api/dashboard");
+      // Fetch from audit logs API which has proper IP-related logs
+      const response = await fetch("/api/audit-logs?entityType=IP_ADDRESS&limit=50");
       if (response.ok) {
         const data = await response.json();
-        // Transform recent activity to audit logs
-        const transformedLogs: IPAuditLog[] = data.recentActivity
-          .filter((activity: any) => 
-            activity.action.includes("IP") || 
-            activity.entity?.includes("192.168") ||
-            activity.action.includes("ASSIGNMENT")
-          )
-          .map((activity: any) => ({
-            id: activity.id,
-            ipAddress: activity.entity || "Unknown" || undefined,
-            action: activity.action.includes("ASSIGN") ? "assigned" :
-                   activity.action.includes("UNASSIGN") ? "unassigned" :
-                   activity.action.includes("CREATED") ? "modified" :
-                   activity.action.includes("CONFLICT") ? "conflict_detected" :
+        // Transform audit logs to IPAuditLog format
+        const transformedLogs: IPAuditLog[] = data.auditLogs.map((log: any) => {
+          // Get IP address from the included ipAddress relation or from details
+          let ipAddress = "Unknown";
+          if (log.ipAddress?.address) {
+            ipAddress = log.ipAddress.address;
+          } else if (log.details?.ipAddress) {
+            ipAddress = log.details.ipAddress;
+          }
+          
+          // Get equipment name from the included equipment relation or from details
+          let equipmentName = undefined;
+          if (log.equipment?.name) {
+            equipmentName = log.equipment.name;
+          } else if (log.details?.equipmentName) {
+            equipmentName = log.details.equipmentName;
+          }
+          
+          return {
+            id: log.id,
+            ipAddress: ipAddress,
+            action: log.action.includes("ASSIGNED") || log.action.includes("ASSIGN") ? "assigned" :
+                   log.action.includes("UNASSIGNED") || log.action.includes("UNASSIGN") ? "unassigned" :
+                   log.action.includes("UPDATED") || log.action.includes("MODIFIED") ? "modified" :
+                   log.action.includes("CONFLICT") ? "conflict_detected" :
                    "modified" as IPAuditLog["action"],
-            performedBy: activity.user || "System",
-            performedAt: new Date(activity.time),
-            details: activity.action,
-            equipmentName: activity.entity,
-          }));
+            equipmentName: equipmentName,
+            performedBy: log.user ? `${log.user.firstName} ${log.user.lastName}` : "System",
+            performedAt: new Date(log.createdAt),
+            details: log.action,
+          };
+        });
         setAuditLogs(transformedLogs);
       }
     } catch (err) {
       console.error("Error fetching audit logs:", err);
+      // Fallback to empty array
+      setAuditLogs([]);
     }
   };
 
@@ -312,6 +335,29 @@ export function IPManagementDashboard() {
     fetchIPAddresses();
     fetchEquipment();
     fetchConflicts();
+  }, []);
+
+  // Check for addIP URL parameter and automatically open add dialog
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ipToAdd = urlParams.get('addIP');
+    
+    if (ipToAdd) {
+      // Open the add dialog
+      setIsAddDialogOpen(true);
+      
+      // Pre-fill the IP address field
+      setFormData(prev => ({
+        ...prev,
+        address: ipToAdd,
+      }));
+
+      // Show toast message
+      showSuccess(`Ready to add IP ${ipToAdd} to the database`);
+
+      // Clean up URL
+      window.history.replaceState({}, '', '/ip-management');
+    }
   }, []);
 
   // Update assignments when IP addresses change
@@ -528,61 +574,79 @@ export function IPManagementDashboard() {
     }
   };
 
-  const handleUnassignIP = async (ip: IPAddress) => {
+  const handleUnassignIP = (ip: IPAddress) => {
     if (!ip.assignments || ip.assignments.length === 0) return;
 
     const activeAssignment = ip.assignments.find(a => a.isActive);
     if (!activeAssignment) return;
 
-    if (!confirm("Are you sure you want to unassign this IP address?")) return;
+    showConfirmation({
+      title: "Unassign IP Address",
+      description: "Are you sure you want to unassign this IP address from the equipment?",
+      confirmText: "Unassign",
+      variant: "warning",
+      itemName: ip.address,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          setError(null);
 
-    try {
-      setSubmitting(true);
-      setError(null);
+          const response = await fetch(`/api/ip-assignments?ipAddressId=${ip.id}&equipmentId=${activeAssignment.equipment?.id}`, {
+            method: "DELETE",
+          });
 
-      const response = await fetch(`/api/ip-assignments?ipAddressId=${ip.id}&equipmentId=${activeAssignment.equipment?.id}`, {
-        method: "DELETE",
-      });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to unassign IP address");
+          }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to unassign IP address");
-      }
-
-      await fetchIPAddresses();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to unassign IP address");
-      console.error("Error unassigning IP address:", err);
-    } finally {
-      setSubmitting(false);
-    }
+          await fetchIPAddresses();
+          showSuccess(`IP address ${ip.address} unassigned successfully`);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "Failed to unassign IP address";
+          setError(errorMessage);
+          showError(errorMessage);
+          console.error("Error unassigning IP address:", err);
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
   };
 
-  const handleDeleteIP = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this IP address? This action cannot be undone.")) {
-      return;
-    }
+  const handleDeleteIP = (id: string, address: string) => {
+    showConfirmation({
+      title: "Delete IP Address",
+      description: "This IP address will be permanently removed from the system. This action cannot be undone.",
+      confirmText: "Delete IP Address",
+      variant: "danger",
+      itemName: address,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          setError(null);
 
-    try {
-      setSubmitting(true);
-      setError(null);
+          const response = await fetch(`/api/ip-addresses/${id}`, {
+            method: "DELETE",
+          });
 
-      const response = await fetch(`/api/ip-addresses/${id}`, {
-        method: "DELETE",
-      });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to delete IP address");
+          }
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete IP address");
-      }
-
-      await fetchIPAddresses();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete IP address");
-      console.error("Error deleting IP address:", err);
-    } finally {
-      setSubmitting(false);
-    }
+          await fetchIPAddresses();
+          showSuccess(`IP address ${address} deleted successfully`);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "Failed to delete IP address";
+          setError(errorMessage);
+          showError(errorMessage);
+          console.error("Error deleting IP address:", err);
+        } finally {
+          setSubmitting(false);
+        }
+      },
+    });
   };
 
   const resetForm = () => {
@@ -908,7 +972,7 @@ export function IPManagementDashboard() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDeleteIP(ip.id)}
+                            onClick={() => handleDeleteIP(ip.id, ip.address)}
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
@@ -959,10 +1023,14 @@ export function IPManagementDashboard() {
                         <Badge variant="outline">{assignment.equipmentType}</Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <MapPin className="h-3 w-3" />
-                          <span>{assignment.location}</span>
-                        </div>
+                        {assignment.location ? (
+                          <div className="flex items-center space-x-1">
+                            <MapPin className="h-3 w-3" />
+                            <span>{assignment.location}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
@@ -1104,19 +1172,20 @@ export function IPManagementDashboard() {
                       </TableCell>
                       <TableCell>
                         {log.equipmentName ? (
-                          <div>
-                            <div className="font-medium">{log.equipmentName}</div>
-                            <div className="text-sm text-muted-foreground">ID: {log.equipmentId}</div>
-                          </div>
+                          <span className="font-medium">{log.equipmentName}</span>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell>{log.performedBy}</TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{log.performedAt.toLocaleDateString()}</span>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">
+                            {log.performedAt.toLocaleDateString()}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {log.performedAt.toLocaleTimeString()}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{log.details}</TableCell>
@@ -1425,6 +1494,30 @@ export function IPManagementDashboard() {
           await handleConfirmAssignment(equipmentId);
         }}
       />
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
+
+      {/* Confirmation Dialog */}
+      {confirmation && (
+        <ConfirmationDialog
+          isOpen={confirmation.isOpen}
+          onClose={hideConfirmation}
+          onConfirm={confirm}
+          title={confirmation.title}
+          description={confirmation.description}
+          confirmText={confirmation.confirmText}
+          cancelText={confirmation.cancelText}
+          variant={confirmation.variant}
+          itemName={confirmation.itemName}
+        />
+      )}
     </div>
   );
 }

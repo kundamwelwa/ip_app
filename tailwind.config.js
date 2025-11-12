@@ -60,6 +60,9 @@ module.exports = {
       },
     },
     extend: {
+      fontFamily: {
+        orbitron: ['var(--font-orbitron)'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
