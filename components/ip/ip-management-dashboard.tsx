@@ -63,6 +63,13 @@ import { Toast } from "@/components/ui/toast";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirmation } from "@/hooks/use-confirmation";
+import { isIPManagementFormFeatureEnabled } from "@/lib/feature-flags";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Types
 interface IPAddress {
@@ -451,8 +458,17 @@ export function IPManagementDashboard() {
   };
 
   const handleAddIP = async () => {
-    if (!formData.address || !formData.subnet) {
-      setError("IP address and subnet are required");
+    // Only require IP address
+    if (!formData.address) {
+      setError("IP address is required");
+      return;
+    }
+
+    // Validate subnet if it's required via feature flag
+    if (isIPManagementFormFeatureEnabled("showSubnetField") && 
+        isIPManagementFormFeatureEnabled("requireSubnet") && 
+        !formData.subnet) {
+      setError("Subnet is required");
       return;
     }
 
@@ -460,12 +476,15 @@ export function IPManagementDashboard() {
       setSubmitting(true);
       setError(null);
 
+      // Auto-generate subnet from IP if not provided
+      const subnet = formData.subnet || `${formData.address.split('.').slice(0, 3).join('.')}.0/24`;
+
       const response = await fetch("/api/ip-addresses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-      address: formData.address,
-      subnet: formData.subnet,
+          address: formData.address,
+          subnet: subnet,
           gateway: formData.gateway || null,
           dns: formData.dns ? formData.dns.split(',').map((d: string) => d.trim()).join(',') : null,
           notes: formData.notes || null,
@@ -519,14 +538,29 @@ export function IPManagementDashboard() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to update IP address");
+        let errorMessage = "Failed to update IP address";
+        try {
+          // Try to parse JSON error response
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } else {
+            // If not JSON, use status text
+            errorMessage = response.statusText || errorMessage;
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
       await fetchIPAddresses();
-    setIsEditDialogOpen(false);
-    setEditingIP(null);
-    resetForm();
+      setIsEditDialogOpen(false);
+      setEditingIP(null);
+      resetForm();
+      showSuccess(`IP address ${formData.address} updated successfully`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update IP address");
       console.error("Error updating IP address:", err);
@@ -1024,10 +1058,10 @@ export function IPManagementDashboard() {
                       </TableCell>
                       <TableCell>
                         {assignment.location ? (
-                          <div className="flex items-center space-x-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{assignment.location}</span>
-                          </div>
+                        <div className="flex items-center space-x-1">
+                          <MapPin className="h-3 w-3" />
+                          <span>{assignment.location}</span>
+                        </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
@@ -1200,115 +1234,153 @@ export function IPManagementDashboard() {
 
       {/* Add IP Dialog */}
       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col">
-          <DialogHeader className="space-y-3 flex-shrink-0">
-            <DialogTitle className="text-2xl font-bold">Add IP Address</DialogTitle>
-            <DialogDescription className="text-base">
-              Add a new IP address to the network pool with its configuration details
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto dialog-scroll">
+          <DialogHeader>
+            <DialogTitle>Add IP Address</DialogTitle>
+            <DialogDescription>
+              Add a new IP address to the network pool
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-6 overflow-y-auto flex-1 pr-2">
-            {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+          
+          <TooltipProvider>
+            <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
+              {error && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Network Information Section */}
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 pb-2 border-b border-border">
-                <Network className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Network Information</h3>
-              </div>
+              )}
               
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2.5">
-                  <Label htmlFor="address" className="text-sm font-semibold text-foreground flex items-center space-x-1">
-                    <span>IP Address</span>
-                    <span className="text-red-500">*</span>
-                  </Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    placeholder="e.g., 192.168.1.10"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">The IPv4 address for this device</p>
-              </div>
-                <div className="space-y-2.5">
-                  <Label htmlFor="subnet" className="text-sm font-semibold text-foreground flex items-center space-x-1">
-                    <span>Subnet Mask</span>
-                    <span className="text-red-500">*</span>
-                  </Label>
-                <Input
-                  id="subnet"
-                  value={formData.subnet}
-                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
-                    placeholder="e.g., 192.168.1.0/24"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Network subnet in CIDR notation</p>
-              </div>
-            </div>
-              
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2.5">
-                  <Label htmlFor="gateway" className="text-sm font-semibold text-foreground flex items-center space-x-1">
-                    <span>Gateway</span>
-                    <span className="text-red-500">*</span>
-                  </Label>
-                <Input
-                  id="gateway"
-                  value={formData.gateway}
-                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
-                    placeholder="e.g., 192.168.1.1"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Default gateway address</p>
-              </div>
-                <div className="space-y-2.5">
-                  <Label htmlFor="dns" className="text-sm font-semibold text-foreground">
-                    DNS Servers
-                  </Label>
-                <Input
-                  id="dns"
-                  value={formData.dns}
-                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
-                    placeholder="e.g., 8.8.8.8, 8.8.4.4"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Comma-separated DNS server addresses</p>
-              </div>
-            </div>
-            </div>
+              {/* Network Configuration Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Network className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-base">Network Configuration</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="address" className="cursor-help">
+                        IP Address <span className="text-red-500">*</span>
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Enter a valid IPv4 address</p>
+                      <p className="text-xs mt-1">Format: xxx.xxx.xxx.xxx</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    placeholder="192.168.1.10"
+                    className="font-mono"
+                    required
+                  />
+                </div>
 
-            {/* Additional Information Section */}
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 pb-2 border-b border-border">
-                <FileText className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Additional Information</h3>
+                {isIPManagementFormFeatureEnabled("showSubnetField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="subnet" className="cursor-help">
+                          Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter the network subnet in CIDR notation</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="subnet"
+                      value={formData.subnet}
+                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                      placeholder="192.168.1.0/24"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
+
+                {isIPManagementFormFeatureEnabled("showGatewayField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="gateway" className="cursor-help">
+                          Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter the default gateway address</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="gateway"
+                      value={formData.gateway}
+                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                      placeholder="192.168.1.1"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
+
+                {isIPManagementFormFeatureEnabled("showDNSField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="dns" className="cursor-help">
+                          DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter comma-separated DNS server addresses</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="dns"
+                      value={formData.dns}
+                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                      placeholder="8.8.8.8, 8.8.4.4"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
               </div>
-              
-              <div className="space-y-2.5">
-                <Label htmlFor="notes" className="text-sm font-semibold text-foreground">
-                  Notes (Optional)
-                </Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Add any additional notes or comments about this IP address..."
-                  className="min-h-[100px] bg-background border-2 focus:border-primary resize-none"
-              />
-                <p className="text-xs text-muted-foreground">Any relevant information about this IP address</p>
+
+              {isIPManagementFormFeatureEnabled("showNotesField") && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-base">Additional Information</h3>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="notes" className="cursor-help">
+                          Notes
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Add any additional notes or information</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Additional notes..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-          </div>
-          <DialogFooter className="gap-2 pt-4 border-t border-border flex-shrink-0">
+          </TooltipProvider>
+
+          <DialogFooter className="gap-2 pt-4">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -1317,11 +1389,10 @@ export function IPManagementDashboard() {
                 setError(null);
               }}
               disabled={submitting}
-              className="min-w-[100px]"
             >
               Cancel
             </Button>
-            <Button onClick={handleAddIP} disabled={submitting} className="min-w-[140px]">
+            <Button onClick={handleAddIP} disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1340,117 +1411,147 @@ export function IPManagementDashboard() {
 
       {/* Edit IP Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[650px] max-h-[90vh] flex flex-col">
-          <DialogHeader className="space-y-3 flex-shrink-0">
-            <DialogTitle className="text-2xl font-bold">Edit IP Address</DialogTitle>
-            <DialogDescription className="text-base">
-              Update IP address configuration and settings
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto dialog-scroll">
+          <DialogHeader>
+            <DialogTitle>Edit IP Address</DialogTitle>
+            <DialogDescription>
+              Update IP address configuration
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-6 overflow-y-auto flex-1 pr-2">
-            {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+          
+          <TooltipProvider>
+            <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
+              {error && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* Network Information Section */}
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 pb-2 border-b border-border">
-                <Network className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Network Information</h3>
-              </div>
+              )}
               
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2.5">
-                  <Label htmlFor="edit-address" className="text-sm font-semibold text-foreground">
+              {/* Network Configuration Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Network className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-base">Network Configuration</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-address">
                     IP Address
                   </Label>
-                <Input
-                  id="edit-address"
-                  value={formData.address}
+                  <Input
+                    id="edit-address"
+                    value={formData.address}
                     disabled
-                    className="h-11 bg-muted/50 border-2 cursor-not-allowed"
-                  placeholder="192.168.1.10"
-                />
-                  <p className="text-xs text-amber-600 dark:text-amber-500 font-medium flex items-center space-x-1">
+                    className="font-mono bg-muted/50 cursor-not-allowed"
+                  />
+                  <p className="text-xs text-amber-600 dark:text-amber-500 font-medium flex items-center gap-1">
                     <Lock className="h-3 w-3" />
-                    <span>IP address cannot be modified</span>
+                    IP address cannot be modified
                   </p>
-              </div>
-                <div className="space-y-2.5">
-                  <Label htmlFor="edit-subnet" className="text-sm font-semibold text-foreground flex items-center space-x-1">
-                    <span>Subnet Mask</span>
-                    <span className="text-red-500">*</span>
-                  </Label>
-                <Input
-                  id="edit-subnet"
-                  value={formData.subnet}
-                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
-                    placeholder="e.g., 192.168.1.0/24"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Network subnet in CIDR notation</p>
-              </div>
-            </div>
-              
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2.5">
-                  <Label htmlFor="edit-gateway" className="text-sm font-semibold text-foreground flex items-center space-x-1">
-                    <span>Gateway</span>
-                    <span className="text-red-500">*</span>
-                  </Label>
-                <Input
-                  id="edit-gateway"
-                  value={formData.gateway}
-                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
-                    placeholder="e.g., 192.168.1.1"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Default gateway address</p>
-              </div>
-                <div className="space-y-2.5">
-                  <Label htmlFor="edit-dns" className="text-sm font-semibold text-foreground">
-                    DNS Servers
-                  </Label>
-                <Input
-                  id="edit-dns"
-                  value={formData.dns}
-                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
-                    placeholder="e.g., 8.8.8.8, 8.8.4.4"
-                    className="h-11 bg-background border-2 focus:border-primary"
-                />
-                  <p className="text-xs text-muted-foreground mt-1">Comma-separated DNS server addresses</p>
-              </div>
-            </div>
-            </div>
+                </div>
 
-            {/* Additional Information Section */}
-            <div className="space-y-5">
-              <div className="flex items-center space-x-2 pb-2 border-b border-border">
-                <FileText className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Additional Information</h3>
+                {isIPManagementFormFeatureEnabled("showSubnetField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="edit-subnet" className="cursor-help">
+                          Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter the network subnet in CIDR notation</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="edit-subnet"
+                      value={formData.subnet}
+                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                      placeholder="192.168.1.0/24"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
+
+                {isIPManagementFormFeatureEnabled("showGatewayField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="edit-gateway" className="cursor-help">
+                          Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter the default gateway address</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="edit-gateway"
+                      value={formData.gateway}
+                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                      placeholder="192.168.1.1"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
+
+                {isIPManagementFormFeatureEnabled("showDNSField") && (
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="edit-dns" className="cursor-help">
+                          DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Enter comma-separated DNS server addresses</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Input
+                      id="edit-dns"
+                      value={formData.dns}
+                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                      placeholder="8.8.8.8, 8.8.4.4"
+                      className="font-mono"
+                    />
+                  </div>
+                )}
               </div>
-              
-              <div className="space-y-2.5">
-                <Label htmlFor="edit-notes" className="text-sm font-semibold text-foreground">
-                  Notes (Optional)
-                </Label>
-              <Textarea
-                id="edit-notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Add any additional notes or comments about this IP address..."
-                  className="min-h-[100px] bg-background border-2 focus:border-primary resize-none"
-              />
-                <p className="text-xs text-muted-foreground">Any relevant information about this IP address</p>
+
+              {isIPManagementFormFeatureEnabled("showNotesField") && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-base">Additional Information</h3>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Label htmlFor="edit-notes" className="cursor-help">
+                          Notes
+                        </Label>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Add any additional notes or information</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Textarea
+                      id="edit-notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Additional notes..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 pt-4 border-t border-border flex-shrink-0">
+          </TooltipProvider>
+
+          <DialogFooter className="gap-2 pt-4">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -1460,11 +1561,10 @@ export function IPManagementDashboard() {
                 setError(null);
               }}
               disabled={submitting}
-              className="min-w-[100px]"
             >
               Cancel
             </Button>
-            <Button onClick={handleUpdateIP} disabled={submitting} className="min-w-[140px]">
+            <Button onClick={handleUpdateIP} disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

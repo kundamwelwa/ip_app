@@ -24,8 +24,15 @@ import {
   Loader2,
   AlertTriangle,
   Link,
-  X
+  X,
+  Truck
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Equipment {
   id: string;
@@ -153,32 +160,49 @@ export function EquipmentSelectionDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center space-x-2">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <Link className="h-5 w-5 text-primary" />
-            <span>Select Equipment for IP Assignment</span>
+            Assign IP Address
           </DialogTitle>
           <DialogDescription>
-            Assign <Badge variant="outline" className="mx-1">{ipAddress}</Badge> to equipment
+            Assign <Badge variant="outline" className="mx-1 font-mono text-xs">{ipAddress}</Badge> to equipment
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 overflow-y-auto space-y-4">
-          {/* Search */}
-          <div className="space-y-2">
-            <Label htmlFor="equipment-search">Search Equipment</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="equipment-search"
-                placeholder="Search by name, type, serial number, location, or operator..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+        <TooltipProvider>
+          <div className="flex-1 overflow-y-auto dialog-scroll space-y-6 py-4" style={{ paddingRight: '4px' }}>
+            {/* Search Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Truck className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-base">Select Equipment</h3>
+              </div>
+              
+              <div className="space-y-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="equipment-search" className="cursor-help">
+                      Search Equipment
+                    </Label>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Search by name, type, serial number, location, or operator</p>
+                  </TooltipContent>
+                </Tooltip>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="equipment-search"
+                    placeholder="Search equipment..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
           {/* Error State */}
           {error && (
@@ -201,88 +225,86 @@ export function EquipmentSelectionDialog({
           {/* Equipment List */}
           {!isLoading && !error && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">
-                  Available Equipment ({filteredEquipment.length})
-                </h3>
+              <div className="flex items-center justify-between pb-2">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {filteredEquipment.length} {filteredEquipment.length === 1 ? 'equipment' : 'equipments'} available
+                </p>
                 {selectedEquipment && (
-                  <Badge variant="outline" className="text-green-600 border-green-600">
-                    Selected: {selectedEquipment.name}
+                  <Badge variant="default" className="bg-green-600">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Selected
                   </Badge>
                 )}
               </div>
               
-              <div className="grid gap-3 max-h-96 overflow-y-auto">
+              <div className="space-y-3">
                 {filteredEquipment.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    {searchTerm ? "No equipment found matching your search" : "No equipment available"}
+                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/20">
+                    <Truck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium">{searchTerm ? "No equipment found" : "No equipment available"}</p>
+                    <p className="text-sm mt-1">{searchTerm && "Try adjusting your search"}</p>
                   </div>
                 ) : (
                   filteredEquipment.map((item) => (
                     <Card 
                       key={item.id}
-                      className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                      className={`cursor-pointer transition-all duration-200 ${
                         selectedEquipment?.id === item.id 
-                          ? 'ring-2 ring-primary bg-primary/5' 
-                          : 'hover:bg-muted/50'
+                          ? 'ring-2 ring-primary bg-primary/5 border-primary shadow-md' 
+                          : 'hover:bg-muted/50 hover:shadow-sm hover:border-primary/30'
                       }`}
                       onClick={() => handleSelectEquipment(item)}
                     >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-base">{item.name}</CardTitle>
-                          <div className="flex items-center space-x-2">
-                            {getStatusIcon(item.status)}
-                            {getStatusBadge(item.status)}
+                      <CardContent className="p-5 pl-6">
+                        <div className="flex items-start gap-4">
+                          {/* Selection Indicator */}
+                          <div className="flex-shrink-0 mt-1">
+                            {selectedEquipment?.id === item.id ? (
+                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary">
+                                <CheckCircle className="h-3 w-3 text-primary-foreground" />
+                              </div>
+                            ) : (
+                              <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30"></div>
+                            )}
                           </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium">Type:</span>
-                              <span className="text-muted-foreground">{item.type}</span>
+
+                          {/* Equipment Info */}
+                          <div className="flex-1 min-w-0 space-y-3">
+                            {/* Header */}
+                            <div>
+                              <h4 className="font-semibold text-base mb-1.5 truncate">{item.name}</h4>
+                              <Badge variant="outline" className="text-xs">{item.type}</Badge>
                             </div>
-                            {item.model && (
-                              <div className="flex items-center space-x-2">
-                                <span className="font-medium">Model:</span>
-                                <span className="text-muted-foreground">{item.model}</span>
-                              </div>
-                            )}
-                            {item.serialNumber && (
-                              <div className="flex items-center space-x-2">
-                                <span className="font-medium">Serial:</span>
-                                <span className="text-muted-foreground">{item.serialNumber}</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            {item.location && (
-                              <div className="flex items-center space-x-2">
-                                <MapPin className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-muted-foreground">{item.location}</span>
-                              </div>
-                            )}
-                            {item.operator && (
-                              <div className="flex items-center space-x-2">
-                                <User className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-muted-foreground">{item.operator}</span>
-                              </div>
-                            )}
-                            {item.manufacturer && (
-                              <div className="flex items-center space-x-2">
-                                <span className="font-medium">Manufacturer:</span>
-                                <span className="text-muted-foreground">{item.manufacturer}</span>
-                              </div>
-                            )}
+                            
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                              {item.model && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground min-w-[60px]">Model:</span>
+                                  <span className="font-medium truncate">{item.model}</span>
+                                </div>
+                              )}
+                              {item.serialNumber && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground min-w-[60px]">Serial:</span>
+                                  <span className="font-mono text-xs truncate">{item.serialNumber}</span>
+                                </div>
+                              )}
+                              {item.location && (
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                  <span className="truncate">{item.location}</span>
+                                </div>
+                              )}
+                              {item.operator && (
+                                <div className="flex items-center gap-2">
+                                  <User className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                  <span className="truncate">{item.operator}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        {item.notes && (
-                          <div className="mt-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
-                            {item.notes}
-                          </div>
-                        )}
                       </CardContent>
                     </Card>
                   ))
@@ -290,23 +312,33 @@ export function EquipmentSelectionDialog({
               </div>
             </div>
           )}
-        </div>
+          </div>
+        </TooltipProvider>
         
-        <DialogFooter className="flex-shrink-0 border-t pt-4">
+        <DialogFooter className="gap-2 pt-4 border-t mt-auto">
           <Button variant="outline" onClick={handleClose}>
-            <X className="h-4 w-4 mr-2" />
             Cancel
           </Button>
           <Button 
             onClick={handleConfirm} 
             disabled={!selectedEquipment}
-            className="min-w-[140px]"
+            className={!selectedEquipment ? 'opacity-50 cursor-not-allowed' : ''}
           >
-            <Link className="h-4 w-4 mr-2" />
-            Assign to {selectedEquipment?.name || "Equipment"}
+            {selectedEquipment ? (
+              <>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Assign to {selectedEquipment.name}
+              </>
+            ) : (
+              <>
+                <Link className="h-4 w-4 mr-2" />
+                Select Equipment First
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

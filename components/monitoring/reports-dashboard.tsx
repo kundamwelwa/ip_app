@@ -8,7 +8,7 @@ import { ReportGenerator } from "@/components/reports/report-generator";
 import { ReportSettings } from "@/components/reports/report-settings";
 import { ReportAnalytics } from "@/components/reports/report-analytics";
 import { ReportList } from "@/components/reports/report-list";
-import {
+import { 
   FileText,
   RefreshCw,
   Settings,
@@ -422,14 +422,14 @@ export function ReportsDashboard() {
         {/* Generate Report Tab */}
         <TabsContent value="generate">
           {templates.length === 0 ? (
-            <Card>
+          <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
                 <p className="text-sm text-muted-foreground">
                   No report templates available.
                 </p>
-              </CardContent>
-            </Card>
+            </CardContent>
+          </Card>
           ) : (
             <ReportGenerator templates={templates} onGenerate={handleGenerateReport} />
           )}

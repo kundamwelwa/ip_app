@@ -58,6 +58,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -67,13 +73,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImportExportDialog } from "./import-export-dialog";
-import { IPAddressFields } from "./ip-address-fields";
+import { IPAddressTagInput } from "./ip-address-tag-input";
 import { MiningEquipment, EquipmentFormData, IPAddressInput } from "@/types/equipment";
 import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
 import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
 import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 import { isEquipmentFeatureEnabled } from "@/lib/feature-flags";
-import { Switch } from "@/components/ui/switch";
 
 // Equipment types and form data are now imported from types/equipment.ts
 
@@ -111,6 +116,7 @@ export function MiningEquipmentDashboard() {
     getOnlineCount,
     getOfflineCount,
   } = useEquipmentMonitoring();
+  
   const [formData, setFormData] = useState<EquipmentFormData>({
     name: "",
     type: "",
@@ -123,21 +129,13 @@ export function MiningEquipmentDashboard() {
     operator: "",
     notes: "",
     status: "ONLINE",
-    assignIPsOnCreation: false,
+    assignIPsOnCreation: true,
     numberOfIPs: 1,
     ipAddresses: [],
   });
-
-  // Initialize IP addresses when assignIPsOnCreation changes
-  const initializeIPAddresses = (count: number): IPAddressInput[] => {
-    return Array.from({ length: count }, () => ({
-      address: "",
-      subnet: "",
-      gateway: "",
-      dns: "",
-      notes: "",
-    }));
-  };
+  
+  // Store IP addresses as simple strings for the tag input
+  const [ipAddressStrings, setIpAddressStrings] = useState<string[]>([]);
 
   // Helper function to show toast messages
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -199,18 +197,7 @@ export function MiningEquipmentDashboard() {
       setIsAddDialogOpen(true);
       
       // Pre-configure for IP assignment
-      setFormData(prev => ({
-        ...prev,
-        assignIPsOnCreation: true,
-        numberOfIPs: 1,
-        ipAddresses: [{
-          address: ipToAdd,
-          subnet: "",
-          gateway: "",
-          dns: "",
-          notes: "",
-        }],
-      }));
+      setIpAddressStrings([ipToAdd]);
 
       // Show toast message
       showToast(`Ready to add IP ${ipToAdd} with new equipment`, "info");
@@ -332,13 +319,10 @@ export function MiningEquipmentDashboard() {
 
   const handleAddEquipment = async () => {
     try {
-      // Validate IP addresses if being assigned
-      if (formData.assignIPsOnCreation && formData.ipAddresses && formData.ipAddresses.length > 0) {
-        const invalidIPs = formData.ipAddresses.filter(ip => !ip.address);
-        if (invalidIPs.length > 0) {
-          showToast("Please fill in all required IP address fields (IP Address).", "error");
-          return;
-        }
+      // Validate that at least one IP address exists
+      if (!ipAddressStrings || ipAddressStrings.length === 0) {
+        showToast("Equipment must have at least one IP address assigned.", "error");
+        return;
       }
 
       const response = await fetch("/api/equipment", {
@@ -357,8 +341,14 @@ export function MiningEquipmentDashboard() {
           operator: formData.operator,
           notes: formData.notes,
           status: formData.status,
-          // Include IP addresses if being assigned
-          ipAddresses: formData.assignIPsOnCreation ? formData.ipAddresses : undefined,
+          // Convert string IPs to the expected format
+          ipAddresses: ipAddressStrings.map(address => ({
+            address,
+            subnet: "",
+            gateway: "",
+            dns: "",
+            notes: "",
+          })),
         }),
       });
 
@@ -488,10 +478,11 @@ export function MiningEquipmentDashboard() {
       operator: "",
       notes: "",
       status: "ONLINE",
-      assignIPsOnCreation: false,
+      assignIPsOnCreation: true,
       numberOfIPs: 1,
       ipAddresses: [],
     });
+    setIpAddressStrings([]);
   };
 
   const formatDate = (date: Date | null | undefined) => {
@@ -634,178 +625,252 @@ export function MiningEquipmentDashboard() {
                 <span className="hidden sm:inline">Add Equipment</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto dialog-scroll">
               <DialogHeader>
                 <DialogTitle>Add New Equipment</DialogTitle>
                 <DialogDescription>
-                  Add a new piece of mining equipment to the system. You can optionally assign IP addresses during creation.
+                  Add a new piece of mining equipment to the system. You must assign at least one IP address.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Equipment Name</Label>
-                    <Input
-                      id="name"
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      placeholder="e.g., Haul Truck CAT 797F"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="type">Equipment Type</Label>
-                    <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {equipmentTypes.map(type => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="model">Model</Label>
-                    <Input
-                      id="model"
-                      value={formData.model}
-                      onChange={(e) => setFormData({...formData, model: e.target.value})}
-                      placeholder="e.g., 797F"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="manufacturer">Manufacturer</Label>
-                    <Select value={formData.manufacturer} onValueChange={(value) => setFormData({...formData, manufacturer: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select manufacturer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {manufacturers.map(manufacturer => (
-                          <SelectItem key={manufacturer} value={manufacturer}>{manufacturer}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="serialNumber">Serial Number</Label>
-                    <Input
-                      id="serialNumber"
-                      value={formData.serialNumber}
-                      onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
-                      placeholder="e.g., CAT797F-001"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="macAddress">MAC Address (Optional)</Label>
-                    <Input
-                      id="macAddress"
-                      value={formData.macAddress}
-                      onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
-                      placeholder="Will be assigned later if not provided"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  <Input
-                    id="location"
-                    value={formData.location}
-                    onChange={(e) => setFormData({...formData, location: e.target.value})}
-                    placeholder="e.g., Pit A - Level 3"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="operator">Operator</Label>
-                  <Input
-                    id="operator"
-                    value={formData.operator}
-                    onChange={(e) => setFormData({...formData, operator: e.target.value})}
-                    placeholder="e.g., John Smith"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                    placeholder="Additional notes about the equipment..."
-                    rows={3}
-                  />
-                </div>
-
-                {/* IP Address Assignment Section */}
-                <div className="border-t pt-4 mt-2">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="space-y-1">
-                      <Label className="text-base font-semibold">IP Address Assignment</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Optionally assign one or more IP addresses to this equipment during creation.
-                      </p>
+              <TooltipProvider>
+                <div className="grid gap-6 py-4" style={{ paddingRight: '4px' }}>
+                  {/* Basic Information Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <HardHat className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-base">Basic Information</h3>
                     </div>
-                    <Switch
-                      checked={formData.assignIPsOnCreation}
-                      onCheckedChange={(checked: boolean) => {
-                        setFormData({
-                          ...formData,
-                          assignIPsOnCreation: checked,
-                          ipAddresses: checked ? initializeIPAddresses(formData.numberOfIPs || 1) : [],
-                        });
-                      }}
-                    />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="name" className="cursor-help">
+                              Name <span className="text-red-500">*</span>
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Enter a descriptive name for the equipment</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          placeholder="Haul Truck 01"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="type" className="cursor-help">
+                              Type <span className="text-red-500">*</span>
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Select the category of equipment</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {equipmentTypes.map(type => (
+                              <SelectItem key={type} value={type}>{type}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
 
-                  {formData.assignIPsOnCreation && (
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4">
-                        <div className="space-y-2 flex-1">
-                          <Label htmlFor="numberOfIPs">Number of IP Addresses</Label>
-                          <Select
-                            value={String(formData.numberOfIPs || 1)}
-                            onValueChange={(value) => {
-                              const count = parseInt(value);
-                              setFormData({
-                                ...formData,
-                                numberOfIPs: count,
-                                ipAddresses: initializeIPAddresses(count),
-                              });
-                            }}
-                          >
-                            <SelectTrigger id="numberOfIPs">
-                              <SelectValue placeholder="Select number" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {[1, 2, 3, 4, 5].map((num) => (
-                                <SelectItem key={num} value={String(num)}>
-                                  {num} {num === 1 ? "IP Address" : "IP Addresses"}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <IPAddressFields
-                        ipAddresses={formData.ipAddresses || []}
-                        onChange={(ipAddresses) => setFormData({ ...formData, ipAddresses })}
-                        onRemove={(index) => {
-                          const updated = formData.ipAddresses?.filter((_, i) => i !== index) || [];
-                          setFormData({
-                            ...formData,
-                            ipAddresses: updated,
-                            numberOfIPs: updated.length,
-                          });
-                        }}
+                  {/* IP Address Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <Network className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-base">Network Configuration</h3>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Label className="cursor-help">
+                            IP Addresses <span className="text-red-500">*</span>
+                          </Label>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add one or more IP addresses for this equipment</p>
+                          <p className="text-xs mt-1">Type an IP address and click Add or press Enter</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <IPAddressTagInput
+                        ipAddresses={ipAddressStrings}
+                        onChange={setIpAddressStrings}
                       />
                     </div>
-                  )}
+                  </div>
+
+                  {/* Equipment Details Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <Wrench className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-base">Equipment Details</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="manufacturer" className="cursor-help">
+                              Manufacturer
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Select the equipment manufacturer</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Select value={formData.manufacturer} onValueChange={(value) => setFormData({...formData, manufacturer: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select manufacturer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {manufacturers.map(manufacturer => (
+                              <SelectItem key={manufacturer} value={manufacturer}>{manufacturer}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="model" className="cursor-help">
+                              Model
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Enter the equipment model number</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="model"
+                          value={formData.model}
+                          onChange={(e) => setFormData({...formData, model: e.target.value})}
+                          placeholder="797F"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="serialNumber" className="cursor-help">
+                              Serial Number
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Enter the unique serial number</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="serialNumber"
+                          value={formData.serialNumber}
+                          onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+                          placeholder="CAT797F-001"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="macAddress" className="cursor-help">
+                              MAC Address
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Optional: Enter the MAC address if known</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="macAddress"
+                          value={formData.macAddress}
+                          onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
+                          placeholder="00:1A:2B:3C:4D:5E"
+                          className="font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Location & Assignment Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-base">Location & Assignment</h3>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="location" className="cursor-help">
+                              Location
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Specify where this equipment is located</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="location"
+                          value={formData.location}
+                          onChange={(e) => setFormData({...formData, location: e.target.value})}
+                          placeholder="Pit A - Level 3"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Label htmlFor="operator" className="cursor-help">
+                              Operator
+                            </Label>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Assign an operator to this equipment</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Input
+                          id="operator"
+                          value={formData.operator}
+                          onChange={(e) => setFormData({...formData, operator: e.target.value})}
+                          placeholder="John Smith"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Label htmlFor="notes" className="cursor-help">
+                            Notes
+                          </Label>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Add any additional notes or information</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <Textarea
+                        id="notes"
+                        value={formData.notes}
+                        onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                        placeholder="Additional notes..."
+                        rows={3}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </TooltipProvider>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                   Cancel
@@ -1243,7 +1308,7 @@ export function MiningEquipmentDashboard() {
 
       {/* Edit Equipment Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto dialog-scroll">
           <DialogHeader>
             <DialogTitle>Edit Equipment</DialogTitle>
             <DialogDescription>

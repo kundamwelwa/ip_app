@@ -166,11 +166,11 @@ export function isUserFeatureEnabled(feature: keyof typeof userFeatures): boolea
 
 // IP Address Management Feature Flags
 export const ipAddressFeatures = {
-  // IP Address Fields
+  // IP Address Fields in Equipment Form
   showSubnetField: false,         // Hidden for now
   showGatewayField: false,        // Hidden for now
   showDNSField: false,            // Hidden for now
-  showNotesField: true,           // Allow notes for each IP
+  showNotesField: false,          // Hidden - notes removed per user request
   
   // Advanced Features
   requireSubnet: false,           // Don't require subnet
@@ -181,6 +181,28 @@ export const ipAddressFeatures = {
   allowRemoveIP: true,            // Allow removing individual IPs from multi-IP equipment
   showIPDetails: false,           // Show subnet, gateway, DNS in IP display
 } as const;
+
+// IP Management Form Feature Flags (for IP Management Dashboard)
+export const ipManagementFormFeatures = {
+  // Form Fields
+  showSubnetField: false,         // Hidden - only IP address visible
+  showGatewayField: false,        // Hidden - only IP address visible
+  showDNSField: false,            // Hidden - only IP address visible
+  showNotesField: false,          // Hidden - only IP address visible
+  showIsReservedField: false,     // Hidden - only IP address visible
+  
+  // Field Requirements (if shown)
+  requireSubnet: false,           // Don't require subnet
+  requireGateway: false,          // Don't require gateway
+  requireDNS: false,              // Don't require DNS
+} as const;
+
+/**
+ * Check if an IP management form feature is enabled
+ */
+export function isIPManagementFormFeatureEnabled(feature: keyof typeof ipManagementFormFeatures): boolean {
+  return Boolean(ipManagementFormFeatures[feature]);
+}
 
 /**
  * Check if an IP address feature is enabled
