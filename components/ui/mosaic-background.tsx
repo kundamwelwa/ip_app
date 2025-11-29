@@ -8,17 +8,46 @@ interface MosaicBackgroundProps {
   subtitle?: string;
 }
 
+// Pre-generated stable transforms (same on every render)
+const STABLE_TRANSFORMS = [
+  { rotation: 2.34, scale: 1.05 },
+  { rotation: -3.12, scale: 0.92 },
+  { rotation: 1.56, scale: 1.18 },
+  { rotation: -1.89, scale: 0.87 },
+  { rotation: 4.21, scale: 1.12 },
+  { rotation: -2.67, scale: 0.95 },
+  { rotation: 0.93, scale: 1.08 },
+  { rotation: 3.45, scale: 0.91 },
+  { rotation: -4.12, scale: 1.15 },
+  { rotation: 2.78, scale: 0.88 },
+  { rotation: -0.45, scale: 1.09 },
+  { rotation: 1.23, scale: 0.97 },
+  { rotation: -3.56, scale: 1.14 },
+  { rotation: 4.67, scale: 0.84 },
+  { rotation: 0.12, scale: 1.06 },
+  { rotation: -2.34, scale: 0.93 },
+  { rotation: 3.89, scale: 1.11 },
+  { rotation: -1.67, scale: 0.89 },
+  { rotation: 2.01, scale: 1.16 },
+  { rotation: -4.45, scale: 0.96 },
+  { rotation: 1.78, scale: 1.02 },
+  { rotation: -0.89, scale: 0.85 },
+  { rotation: 3.23, scale: 1.13 },
+  { rotation: -2.12, scale: 0.94 },
+];
+
 export function MosaicBackground({ imageSrc, systemName, subtitle }: MosaicBackgroundProps) {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Mosaic Background */}
       <div className="absolute inset-0 grid grid-cols-4 grid-rows-6 gap-1 opacity-30">
-        {Array.from({ length: 24 }).map((_, index) => (
+        {STABLE_TRANSFORMS.map((transform, index) => (
           <div
             key={index}
             className="relative overflow-hidden rounded-sm"
             style={{
-              transform: `rotate(${Math.random() * 10 - 5}deg) scale(${0.8 + Math.random() * 0.4})`,
+              transform: `rotate(${transform.rotation}deg) scale(${transform.scale})`,
+              minHeight: '100px', // Ensure minimum height for image
             }}
           >
             <Image
@@ -26,7 +55,8 @@ export function MosaicBackground({ imageSrc, systemName, subtitle }: MosaicBackg
               alt=""
               fill
               className="object-cover blur-sm"
-              sizes="(max-width: 768px) 100vw, 50vw"
+              sizes="25vw"
+              priority={index < 4}
             />
           </div>
         ))}

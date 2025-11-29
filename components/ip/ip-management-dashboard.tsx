@@ -26,6 +26,7 @@ import {
   TrendingDown,
   AlertCircle,
   Filter,
+  Download,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -70,6 +71,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { BulkActionToolbar, BulkSelectCheckbox } from "@/components/ui/bulk-action-toolbar";
+import { BulkConfirmationDialog, BulkConfirmationItem } from "@/components/ui/bulk-confirmation-dialog";
+import { exportSelectedIPs } from "@/lib/export-utils";
+import { AdvancedFilters, ActiveFilter, FilterOption, useAdvancedFilters } from "@/components/ui/advanced-filters";
 
 // Types
 interface IPAddress {
@@ -158,6 +163,15 @@ export function IPManagementDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [equipmentList, setEquipmentList] = useState<Array<{ id: string; name: string; type: string }>>([]);
+
+  // Bulk selection state
+  const [selectedIPIds, setSelectedIPIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkReserveDialogOpen, setBulkReserveDialogOpen] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Advanced filters state
+  const [advancedFilters, setAdvancedFilters] = useState<ActiveFilter[]>([]);
 
   // Toast and Confirmation hooks
   const { toast, hideToast, showSuccess, showError, showWarning } = useToast();
@@ -423,7 +437,26 @@ export function IPManagementDashboard() {
     const normalizedFilter = filterStatus.toLowerCase();
     const matchesStatus = filterStatus === "all" || normalizedStatus === normalizedFilter;
     
-    return matchesSearch && matchesStatus;
+    // Advanced filters
+    const matchesAdvancedFilters = advancedFilters.every(filter => {
+      switch (filter.id) {
+        case "subnet":
+          return ip.subnet.includes(filter.value);
+        case "location":
+          return ip.location?.toLowerCase().includes(filter.value.toLowerCase()) || false;
+        case "equipmentType":
+          return ip.equipmentType?.toLowerCase() === filter.value.toLowerCase() || false;
+        case "assignmentStatus":
+          if (filter.value === "assigned") return ip.status === "ASSIGNED";
+          if (filter.value === "unassigned") return ip.status === "AVAILABLE";
+          if (filter.value === "reserved") return ip.status === "RESERVED";
+          return true;
+        default:
+          return true;
+      }
+    });
+    
+    return matchesSearch && matchesStatus && matchesAdvancedFilters;
   });
 
   const getStatusIcon = (status: string) => {
@@ -483,7 +516,7 @@ export function IPManagementDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          address: formData.address,
+      address: formData.address,
           subnet: subnet,
           gateway: formData.gateway || null,
           dns: formData.dns ? formData.dns.split(',').map((d: string) => d.trim()).join(',') : null,
@@ -543,7 +576,7 @@ export function IPManagementDashboard() {
           // Try to parse JSON error response
           const contentType = response.headers.get("content-type");
           if (contentType && contentType.includes("application/json")) {
-            const errorData = await response.json();
+        const errorData = await response.json();
             errorMessage = errorData.error || errorMessage;
           } else {
             // If not JSON, use status text
@@ -557,9 +590,9 @@ export function IPManagementDashboard() {
       }
 
       await fetchIPAddresses();
-      setIsEditDialogOpen(false);
-      setEditingIP(null);
-      resetForm();
+    setIsEditDialogOpen(false);
+    setEditingIP(null);
+    resetForm();
       showSuccess(`IP address ${formData.address} updated successfully`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update IP address");
@@ -701,6 +734,107 @@ export function IPManagementDashboard() {
       location: "",
       notes: "",
     });
+  };
+
+  // Bulk selection handlers
+  const handleSelectAll = () => {
+    if (selectedIPIds.size === filteredIPs.length) {
+      setSelectedIPIds(new Set());
+    } else {
+      setSelectedIPIds(new Set(filteredIPs.map(ip => ip.id)));
+    }
+  };
+
+  const handleSelectIP = (ipId: string) => {
+    const newSelected = new Set(selectedIPIds);
+    if (newSelected.has(ipId)) {
+      newSelected.delete(ipId);
+    } else {
+      newSelected.add(ipId);
+    }
+    setSelectedIPIds(newSelected);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIPIds(new Set());
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    try {
+      setBulkActionLoading(true);
+      const response = await fetch("/api/ip-addresses/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ipAddressIds: Array.from(selectedIPIds) }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete IP addresses");
+      }
+
+      const result = await response.json();
+      showSuccess(result.message || "IP addresses deleted successfully");
+      await fetchIPAddresses();
+      setSelectedIPIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete IP addresses";
+      showError(errorMessage);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  // Bulk reserve/unreserve handler
+  const handleBulkReserve = async (reserve: boolean) => {
+    try {
+      setBulkActionLoading(true);
+      const response = await fetch("/api/ip-addresses/bulk-reserve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          ipAddressIds: Array.from(selectedIPIds),
+          reserved: reserve,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update IP addresses");
+      }
+
+      const result = await response.json();
+      showSuccess(result.message || `IP addresses ${reserve ? 'reserved' : 'unreserved'} successfully`);
+      await fetchIPAddresses();
+      setSelectedIPIds(new Set());
+      setBulkReserveDialogOpen(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to update IP addresses";
+      showError(errorMessage);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  // Export selected IPs
+  const handleExportSelected = () => {
+    const selectedIPs = ipAddresses.filter(ip => selectedIPIds.has(ip.id));
+    exportSelectedIPs(selectedIPs, `selected-ips-${new Date().toISOString().split('T')[0]}.xlsx`);
+    showSuccess(`Exported ${selectedIPs.length} IP address${selectedIPs.length !== 1 ? 'es' : ''}`);
+  };
+
+  // Get selected IP items for confirmation dialog
+  const getSelectedIPItems = (): BulkConfirmationItem[] => {
+    return ipAddresses
+      .filter(ip => selectedIPIds.has(ip.id))
+      .map(ip => ({
+        id: ip.id,
+        label: ip.address,
+        sublabel: ip.assignedTo || "Not assigned",
+        status: ip.status,
+      }));
   };
 
   return (
@@ -886,6 +1020,7 @@ export function IPManagementDashboard() {
 
         {/* IP Addresses Tab */}
         <TabsContent value="addresses" className="space-y-4">
+          <div className="flex flex-col gap-3">
           <div className="flex items-center space-x-2">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -908,6 +1043,50 @@ export function IPManagementDashboard() {
                 <SelectItem value="reserved">Reserved</SelectItem>
               </SelectContent>
             </Select>
+            </div>
+            
+            {/* Advanced Filters */}
+            <AdvancedFilters
+              filters={[
+                {
+                  id: "subnet",
+                  label: "Subnet",
+                  type: "text",
+                  placeholder: "e.g., 192.168.1.0/24",
+                },
+                {
+                  id: "location",
+                  label: "Location",
+                  type: "text",
+                  placeholder: "Filter by location",
+                },
+                {
+                  id: "equipmentType",
+                  label: "Equipment Type",
+                  type: "select",
+                  options: [
+                    { value: "truck", label: "Truck" },
+                    { value: "excavator", label: "Excavator" },
+                    { value: "drill", label: "Drill" },
+                    { value: "loader", label: "Loader" },
+                    { value: "dozer", label: "Dozer" },
+                  ],
+                },
+                {
+                  id: "assignmentStatus",
+                  label: "Assignment Status",
+                  type: "select",
+                  options: [
+                    { value: "assigned", label: "Assigned" },
+                    { value: "unassigned", label: "Unassigned" },
+                    { value: "reserved", label: "Reserved" },
+                  ],
+                },
+              ]}
+              activeFilters={advancedFilters}
+              onApplyFilters={setAdvancedFilters}
+              onClearFilters={() => setAdvancedFilters([])}
+            />
           </div>
 
           <Card>
@@ -926,6 +1105,12 @@ export function IPManagementDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <BulkSelectCheckbox
+                        checked={selectedIPIds.size > 0 && selectedIPIds.size === filteredIPs.length}
+                        onCheckedChange={handleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>IP Address</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Assigned To</TableHead>
@@ -936,7 +1121,16 @@ export function IPManagementDashboard() {
                 </TableHeader>
                 <TableBody>
                   {filteredIPs.map((ip) => (
-                    <TableRow key={ip.id}>
+                    <TableRow 
+                      key={ip.id}
+                      className={selectedIPIds.has(ip.id) ? "bg-muted/50" : ""}
+                    >
+                      <TableCell>
+                        <BulkSelectCheckbox
+                          checked={selectedIPIds.has(ip.id)}
+                          onCheckedChange={() => handleSelectIP(ip.id)}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{ip.address}</TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
@@ -1244,43 +1438,43 @@ export function IPManagementDashboard() {
           
           <TooltipProvider>
             <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
-              {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
-                  </div>
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
                 </div>
-              )}
-              
+              </div>
+            )}
+            
               {/* Network Configuration Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Network className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-base">Network Configuration</h3>
-                </div>
-                
+              </div>
+              
                 <div className="space-y-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Label htmlFor="address" className="cursor-help">
                         IP Address <span className="text-red-500">*</span>
-                      </Label>
+                  </Label>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Enter a valid IPv4 address</p>
                       <p className="text-xs mt-1">Format: xxx.xxx.xxx.xxx</p>
                     </TooltipContent>
                   </Tooltip>
-                  <Input
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                <Input
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="192.168.1.10"
                     className="font-mono"
                     required
-                  />
-                </div>
+                />
+              </div>
 
                 {isIPManagementFormFeatureEnabled("showSubnetField") && (
                   <div className="space-y-2">
@@ -1288,20 +1482,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="subnet" className="cursor-help">
                           Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the network subnet in CIDR notation</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="subnet"
-                      value={formData.subnet}
-                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                <Input
+                  id="subnet"
+                  value={formData.subnet}
+                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
                       placeholder="192.168.1.0/24"
                       className="font-mono"
-                    />
-                  </div>
+                />
+              </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showGatewayField") && (
@@ -1310,20 +1504,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="gateway" className="cursor-help">
                           Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the default gateway address</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="gateway"
-                      value={formData.gateway}
-                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                <Input
+                  id="gateway"
+                  value={formData.gateway}
+                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
                       placeholder="192.168.1.1"
                       className="font-mono"
-                    />
-                  </div>
+                />
+              </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showDNSField") && (
@@ -1332,52 +1526,52 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="dns" className="cursor-help">
                           DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter comma-separated DNS server addresses</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="dns"
-                      value={formData.dns}
-                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                <Input
+                  id="dns"
+                  value={formData.dns}
+                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
                       placeholder="8.8.8.8, 8.8.4.4"
                       className="font-mono"
-                    />
-                  </div>
-                )}
+                />
               </div>
+                )}
+            </div>
 
               {isIPManagementFormFeatureEnabled("showNotesField") && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <FileText className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-base">Additional Information</h3>
-                  </div>
-                  
+              </div>
+              
                   <div className="space-y-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Label htmlFor="notes" className="cursor-help">
                           Notes
-                        </Label>
+                </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Add any additional notes or information</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Textarea
-                      id="notes"
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       placeholder="Additional notes..."
                       rows={3}
-                    />
-                  </div>
-                </div>
-              )}
+              />
             </div>
+          </div>
+              )}
+          </div>
           </TooltipProvider>
 
           <DialogFooter className="gap-2 pt-4">
@@ -1421,37 +1615,37 @@ export function IPManagementDashboard() {
           
           <TooltipProvider>
             <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
-              {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
-                  </div>
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
                 </div>
-              )}
-              
+              </div>
+            )}
+            
               {/* Network Configuration Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Network className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-base">Network Configuration</h3>
-                </div>
-                
+              </div>
+              
                 <div className="space-y-2">
                   <Label htmlFor="edit-address">
                     IP Address
                   </Label>
-                  <Input
-                    id="edit-address"
-                    value={formData.address}
+                <Input
+                  id="edit-address"
+                  value={formData.address}
                     disabled
                     className="font-mono bg-muted/50 cursor-not-allowed"
-                  />
+                />
                   <p className="text-xs text-amber-600 dark:text-amber-500 font-medium flex items-center gap-1">
                     <Lock className="h-3 w-3" />
                     IP address cannot be modified
                   </p>
-                </div>
+              </div>
 
                 {isIPManagementFormFeatureEnabled("showSubnetField") && (
                   <div className="space-y-2">
@@ -1459,20 +1653,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-subnet" className="cursor-help">
                           Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the network subnet in CIDR notation</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="edit-subnet"
-                      value={formData.subnet}
-                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                <Input
+                  id="edit-subnet"
+                  value={formData.subnet}
+                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
                       placeholder="192.168.1.0/24"
                       className="font-mono"
-                    />
-                  </div>
+                />
+              </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showGatewayField") && (
@@ -1481,20 +1675,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-gateway" className="cursor-help">
                           Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the default gateway address</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="edit-gateway"
-                      value={formData.gateway}
-                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                <Input
+                  id="edit-gateway"
+                  value={formData.gateway}
+                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
                       placeholder="192.168.1.1"
                       className="font-mono"
-                    />
-                  </div>
+                />
+              </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showDNSField") && (
@@ -1503,52 +1697,52 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-dns" className="cursor-help">
                           DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
-                        </Label>
+                  </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter comma-separated DNS server addresses</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Input
-                      id="edit-dns"
-                      value={formData.dns}
-                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                <Input
+                  id="edit-dns"
+                  value={formData.dns}
+                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
                       placeholder="8.8.8.8, 8.8.4.4"
                       className="font-mono"
-                    />
-                  </div>
-                )}
+                />
               </div>
+                )}
+            </div>
 
               {isIPManagementFormFeatureEnabled("showNotesField") && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <FileText className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-base">Additional Information</h3>
-                  </div>
-                  
+              </div>
+              
                   <div className="space-y-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-notes" className="cursor-help">
                           Notes
-                        </Label>
+                </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Add any additional notes or information</p>
                       </TooltipContent>
                     </Tooltip>
-                    <Textarea
-                      id="edit-notes"
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              <Textarea
+                id="edit-notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       placeholder="Additional notes..."
                       rows={3}
-                    />
-                  </div>
-                </div>
-              )}
+              />
             </div>
+          </div>
+              )}
+          </div>
           </TooltipProvider>
 
           <DialogFooter className="gap-2 pt-4">
@@ -1618,6 +1812,65 @@ export function IPManagementDashboard() {
           itemName={confirmation.itemName}
         />
       )}
+
+      {/* Bulk Action Toolbar */}
+      <BulkActionToolbar
+        selectedCount={selectedIPIds.size}
+        totalCount={filteredIPs.length}
+        onClear={handleClearSelection}
+        onSelectAll={handleSelectAll}
+        actions={[
+          {
+            id: "delete",
+            label: "Delete Selected",
+            icon: <Trash2 className="h-4 w-4" />,
+            variant: "destructive",
+            onClick: () => setBulkDeleteDialogOpen(true),
+          },
+          {
+            id: "reserve",
+            label: "Mark as Reserved",
+            icon: <Shield className="h-4 w-4" />,
+            variant: "outline",
+            onClick: () => setBulkReserveDialogOpen(true),
+          },
+          {
+            id: "export",
+            label: "Export Selection",
+            icon: <Download className="h-4 w-4" />,
+            variant: "outline",
+            onClick: handleExportSelected,
+          },
+        ]}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <BulkConfirmationDialog
+        isOpen={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete IP Addresses"
+        description="Are you sure you want to delete these IP addresses?"
+        items={getSelectedIPItems()}
+        confirmText="Delete All"
+        variant="danger"
+        isLoading={bulkActionLoading}
+        warningMessage="⚠️ This action cannot be undone. All selected IP addresses will be permanently removed from the system."
+      />
+
+      {/* Bulk Reserve Confirmation */}
+      <BulkConfirmationDialog
+        isOpen={bulkReserveDialogOpen}
+        onClose={() => setBulkReserveDialogOpen(false)}
+        onConfirm={() => handleBulkReserve(true)}
+        title="Reserve IP Addresses"
+        description="Mark these IP addresses as reserved?"
+        items={getSelectedIPItems()}
+        confirmText="Mark as Reserved"
+        variant="warning"
+        isLoading={bulkActionLoading}
+        warningMessage="These IP addresses will be marked as reserved and cannot be automatically assigned."
+      />
     </div>
   );
 }

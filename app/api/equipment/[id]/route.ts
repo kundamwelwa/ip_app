@@ -194,10 +194,10 @@ export async function DELETE(
     // Check if equipment exists
     const equipment = await prisma.equipment.findUnique({
       where: { id },
-      include: {
-        ipAssignments: {
-          where: { isActive: true },
-        },
+      select: {
+        id: true,
+        name: true,
+        type: true,
       },
     });
 
@@ -205,39 +205,125 @@ export async function DELETE(
       return NextResponse.json({ error: "Equipment not found" }, { status: 404 });
     }
 
-    // Check if equipment has active IP assignments
-    if (equipment.ipAssignments.length > 0) {
-      return NextResponse.json(
-        { error: "Cannot delete equipment with active IP assignments" },
-        { status: 400 }
-      );
-    }
+    // Delete in a transaction to ensure consistency
+    await prisma.$transaction(async (tx) => {
+      // First, get all IP addresses assigned to this equipment BEFORE deleting assignments
+      const ipAssignments = await tx.iPAssignment.findMany({
+        where: {
+          equipmentId: id,
+        },
+        select: {
+          ipAddressId: true,
+        },
+      });
 
-    // Delete equipment
-    await prisma.equipment.delete({
+      const ipAddressIds = ipAssignments.map((assignment) => assignment.ipAddressId);
+
+      // Log the action BEFORE deleting (so equipment still exists)
+      await tx.auditLog.create({
+        data: {
+          action: "EQUIPMENT_DELETED",
+          entityType: "EQUIPMENT",
+          entityId: id,
+          userId: session.user.id,
+          equipmentId: id,
+          details: {
+            name: equipment.name,
+            type: equipment.type,
+          },
+        },
+      });
+
+      // Delete all IP assignments (both active and inactive)
+      await tx.iPAssignment.deleteMany({
+        where: {
+          equipmentId: id,
+        },
+      });
+
+      // Update IP address statuses back to AVAILABLE if they have no other active assignments
+      if (ipAddressIds.length > 0) {
+        for (const ipAddressId of ipAddressIds) {
+          // Check if this IP address has any other active assignments
+          const otherAssignments = await tx.iPAssignment.findFirst({
+            where: {
+              ipAddressId: ipAddressId,
+              isActive: true,
+            },
+          });
+
+          // If no other active assignments, set status back to AVAILABLE
+          if (!otherAssignments) {
+            await tx.iPAddress.update({
+              where: { id: ipAddressId },
+              data: { status: "AVAILABLE" },
+            });
+          }
+        }
+      }
+
+      // Update alerts to remove equipment reference (instead of deleting them)
+      try {
+        await tx.alert.updateMany({
+          where: {
+            equipmentId: id,
+          },
+          data: {
+            equipmentId: null,
+          },
+        });
+      } catch (alertError) {
+        // Log but don't fail if alerts can't be updated
+        console.warn("Could not update alerts for equipment:", alertError);
+      }
+
+      // Finally delete the equipment
+      const deletedEquipment = await tx.equipment.delete({
+        where: { id },
+      });
+      
+      console.log(`Successfully deleted equipment: ${deletedEquipment.id} - ${deletedEquipment.name}`);
+    });
+
+    // Verify deletion
+    const verifyDeleted = await prisma.equipment.findUnique({
       where: { id },
     });
-
-    // Log the action
-    await prisma.auditLog.create({
-      data: {
-        action: "EQUIPMENT_DELETED",
-        entityType: "EQUIPMENT",
-        entityId: id,
-        userId: session.user.id,
-        equipmentId: id,
-        details: {
-          name: equipment.name,
-          type: equipment.type,
-        },
-      },
-    });
+    
+    if (verifyDeleted) {
+      console.error(`WARNING: Equipment ${id} still exists after deletion!`);
+      return NextResponse.json(
+        { error: "Equipment deletion may have failed. Please try again." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ message: "Equipment deleted successfully" });
   } catch (error) {
     console.error("Error deleting equipment:", error);
+    console.error("Error details:", JSON.stringify(error, null, 2));
+    
+    // Provide more detailed error information
+    let errorMessage = "Failed to delete equipment";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Check for Prisma errors
+      const prismaError = error as any;
+      if (prismaError.code) {
+        if (prismaError.code === 'P2003') {
+          errorMessage = "Cannot delete equipment: it is referenced by other records";
+        } else if (prismaError.code === 'P2025') {
+          errorMessage = "Equipment not found";
+        } else if (prismaError.code === 'P2014') {
+          errorMessage = "Cannot delete equipment: required relation violation";
+        } else {
+          errorMessage = `Database error (${prismaError.code}): ${prismaError.meta?.target || prismaError.message || errorMessage}`;
+        }
+      }
+    }
+    
     return NextResponse.json(
-      { error: "Failed to delete equipment" },
+      { error: errorMessage },
       { status: 500 }
     );
   }

@@ -3,6 +3,7 @@
  */
 
 import { MiningEquipment } from "@/types/equipment";
+import * as XLSX from 'xlsx';
 
 export interface EquipmentImportData {
   name: string;
@@ -38,17 +39,18 @@ export function validateEquipmentData(data: EquipmentImportData): { isValid: boo
     errors.push("Equipment type is required");
   }
 
-  if (!data.model?.trim()) {
-    errors.push("Model is required");
-  }
+  // Model, Manufacturer, Serial Number are optional for import
+  // if (!data.model?.trim()) {
+  //   errors.push("Model is required");
+  // }
 
-  if (!data.manufacturer?.trim()) {
-    errors.push("Manufacturer is required");
-  }
+  // if (!data.manufacturer?.trim()) {
+  //   errors.push("Manufacturer is required");
+  // }
 
-  if (!data.serialNumber?.trim()) {
-    errors.push("Serial number is required");
-  }
+  // if (!data.serialNumber?.trim()) {
+  //   errors.push("Serial number is required");
+  // }
 
   if (!data.ipAddress?.trim()) {
     errors.push("IP address is required");
@@ -56,19 +58,19 @@ export function validateEquipmentData(data: EquipmentImportData): { isValid: boo
     errors.push("Invalid IP address format");
   }
 
-  if (!data.macAddress?.trim()) {
-    errors.push("MAC address is required");
-  } else if (!isValidMACAddress(data.macAddress)) {
+  // MAC Address is optional but must be valid if provided
+  if (data.macAddress?.trim() && !isValidMACAddress(data.macAddress)) {
     errors.push("Invalid MAC address format");
   }
 
-  if (!data.location?.trim()) {
-    errors.push("Location is required");
-  }
+  // Location and Operator are optional
+  // if (!data.location?.trim()) {
+  //   errors.push("Location is required");
+  // }
 
-  if (!data.operator?.trim()) {
-    errors.push("Operator is required");
-  }
+  // if (!data.operator?.trim()) {
+  //   errors.push("Operator is required");
+  // }
 
   return {
     isValid: errors.length === 0,
@@ -188,7 +190,7 @@ export function parseCSVToEquipment(csvContent: string): EquipmentImportData[] {
   // Skip header row
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    
+
     if (values.length >= 8) { // At least 8 required fields
       const equipment: EquipmentImportData = {
         name: values[0] || '',
@@ -210,12 +212,193 @@ export function parseCSVToEquipment(csvContent: string): EquipmentImportData[] {
 }
 
 /**
+ * Parses Excel data to equipment import format
+ */
+export async function parseExcelToEquipment(file: File): Promise<EquipmentImportData[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+
+        // Convert to JSON with header row
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (jsonData.length < 1) {
+          resolve([]);
+          return;
+        }
+
+        const firstRow = jsonData[0] as any[];
+
+        // Check if this is the IP Recon Matrix format (first row contains IP addresses)
+        const isReconFormat = firstRow.some((cell: any) =>
+          typeof cell === 'string' && isValidIPAddress(cell)
+        );
+
+        if (isReconFormat) {
+          const equipmentData: EquipmentImportData[] = [];
+
+          // Iterate through all rows
+          jsonData.forEach((row: any) => {
+            if (!Array.isArray(row)) return;
+
+            // Iterate through columns in pairs (IP, Description)
+            for (let i = 0; i < row.length; i += 2) {
+              const ip = row[i];
+              const description = row[i + 1];
+
+              if (typeof ip === 'string' && isValidIPAddress(ip) && description && typeof description === 'string') {
+                // Filter out non-equipment entries
+                const descLower = description.toLowerCase();
+                const ignoreTerms = ['gateway', 'ha ip', 'reserved', 'not in use', 'spare', 'available', 'network', 'broadcast', 'dhcp', 'free'];
+
+                if (ignoreTerms.some(term => descLower.includes(term))) {
+                  continue;
+                }
+
+                // Infer type from description
+                let type = 'OTHER';
+                if (descLower.includes('rajant')) type = 'RAJANT_NODE';
+                else if (descLower.startsWith('fd')) type = 'DRILL';
+                else if (descLower.startsWith('ex')) type = 'EXCAVATOR';
+                else if (descLower.startsWith('tr')) type = 'TRUCK';
+                else if (descLower.startsWith('dz')) type = 'DOZER';
+                else if (descLower.startsWith('ld')) type = 'LOADER';
+                else if (descLower.startsWith('sh')) type = 'SHOVEL';
+                else if (descLower.includes('crusher')) type = 'CRUSHER';
+                else if (descLower.includes('conveyor')) type = 'CONVEYOR';
+
+                equipmentData.push({
+                  name: description,
+                  type: type,
+                  model: '',
+                  manufacturer: '',
+                  serialNumber: '', // Will need to be generated or filled
+                  ipAddress: ip,
+                  macAddress: '', // Will need to be generated or filled
+                  location: '',
+                  operator: '',
+                  notes: 'Imported from IP Recon'
+                });
+              }
+            }
+          });
+
+          resolve(equipmentData);
+          return;
+        }
+
+        // Standard Header Format Parsing
+        if (jsonData.length < 2) {
+          resolve([]);
+          return;
+        }
+
+        const headers = (jsonData[0] as string[]).map(h => h?.toString().toLowerCase() || '');
+        const rows = jsonData.slice(1) as any[];
+
+        const equipmentData = rows.map((row) => {
+          // Helper to find value by header name (fuzzy match)
+          const getValue = (keywords: string[]) => {
+            const index = headers.findIndex(h => keywords.some(k => h.includes(k)));
+            return index !== -1 ? (row[index]?.toString() || '') : '';
+          };
+
+          const name = getValue(['name', 'equipment']);
+
+          // Skip empty rows
+          if (!name) return null;
+
+          return {
+            name: name,
+            type: getValue(['type', 'category']),
+            model: getValue(['model']),
+            manufacturer: getValue(['manufacturer', 'make', 'brand']),
+            serialNumber: getValue(['serial', 'sn']),
+            ipAddress: getValue(['ip', 'address']),
+            macAddress: getValue(['mac']),
+            location: getValue(['location', 'area', 'site']),
+            operator: getValue(['operator', 'driver']),
+            notes: getValue(['notes', 'description', 'comment'])
+          } as EquipmentImportData;
+        }).filter((item): item is EquipmentImportData => item !== null);
+
+        resolve(equipmentData);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Exports equipment data to Excel file
+ */
+export function exportToExcel(equipment: MiningEquipment[], filename: string = 'equipment-export.xlsx'): void {
+  const headers = [
+    "ID",
+    "Name",
+    "Type",
+    "Model",
+    "Manufacturer",
+    "Serial Number",
+    "IP Address",
+    "MAC Address",
+    "Status",
+    "Location",
+    "Operator",
+    "Operating Hours",
+    "Fuel Level",
+    "Last Maintenance",
+    "Next Maintenance",
+    "Notes",
+    "Created At",
+    "Updated At"
+  ];
+
+  const rows = equipment.map(item => [
+    item.id,
+    item.name,
+    item.type,
+    item.model,
+    item.manufacturer,
+    item.serialNumber || '',
+    item.ipAddress || '',
+    item.macAddress,
+    item.status,
+    item.location || '',
+    item.operator || '',
+    item.operatingHours?.toString() || '0',
+    item.fuelLevel?.toString() || '0',
+    item.lastMaintenance ? item.lastMaintenance.toISOString().split('T')[0] : '',
+    item.nextMaintenance ? item.nextMaintenance.toISOString().split('T')[0] : '',
+    item.notes || '',
+    item.createdAt.toISOString().split('T')[0],
+    item.updatedAt.toISOString().split('T')[0]
+  ]);
+
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Equipment");
+
+  XLSX.writeFile(workbook, filename);
+}
+
+/**
  * Downloads CSV file
  */
 export function downloadCSV(csvContent: string, filename: string = 'equipment-export.csv'): void {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
+
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);

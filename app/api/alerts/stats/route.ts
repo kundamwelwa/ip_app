@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/alerts/stats - Get alert statistics
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
@@ -88,9 +88,9 @@ export async function GET(request: NextRequest) {
 
     const avgResolutionTime = resolvedWithTime.length > 0
       ? resolvedWithTime.reduce((sum, alert) => {
-          const diff = alert.resolvedAt!.getTime() - alert.createdAt.getTime();
-          return sum + diff / (1000 * 60 * 60); // Convert to hours
-        }, 0) / resolvedWithTime.length
+        const diff = alert.resolvedAt!.getTime() - alert.createdAt.getTime();
+        return sum + diff / (1000 * 60 * 60); // Convert to hours
+      }, 0) / resolvedWithTime.length
       : 0;
 
     return NextResponse.json({

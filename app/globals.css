@@ -45,13 +45,13 @@
 
 :root {
   --radius: 0.625rem;
-  /* Light mode: slightly gray background with better contrast */
-  --background: oklch(0.98 0.005 270);
+  /* Light mode: layered surfaces for depth */
+  --background: #eff2f8;
+  --background-muted: #e4e8f2;
   --foreground: oklch(0.15 0.002 270);
-  /* Light blue card borders with better visibility */
-  --card: oklch(1 0 0);
+  --card: #ffffff;
   --card-foreground: oklch(0.15 0.002 270);
-  --popover: oklch(1 0 0);
+  --popover: #ffffff;
   --popover-foreground: oklch(0.15 0.002 270);
   /* Enhanced blue primary with better contrast */
   --primary: oklch(0.50 0.18 240);
@@ -135,18 +135,30 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(1200px circle at top 80px right 150px, rgba(255,255,255,0.9), transparent 60%),
+      radial-gradient(800px circle at bottom left, rgba(199,210,254,0.35), transparent 55%),
+      linear-gradient(180deg, var(--background-muted), var(--background));
+    background-attachment: fixed;
+  }
+
+  .dark body {
+    background-color: #0b1422;
+    background-image: radial-gradient(900px circle at top 40px right 120px, rgba(58,79,102,0.25), transparent 70%),
+      linear-gradient(180deg, #0b1422, #050b14);
   }
 
   /* Lighter, more subtle placeholder text */
   ::placeholder {
-    color: rgba(100, 116, 139, 0.35) !important;
+    color: rgba(100, 116, 139, 0.35);
     font-weight: 400;
   }
 
   .dark ::placeholder {
-    color: rgba(148, 163, 184, 0.25) !important;
+    color: rgba(148, 163, 184, 0.25);
     font-weight: 300;
   }
 }
@@ -380,6 +392,22 @@
     @apply bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors;
   }
 
+@keyframes progress-glow {
+  0% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+.animate-progress-glow {
+  animation: progress-glow 1.5s ease-in-out infinite;
+  }
+
   /* Dashboard Cards - Light Blue Borders with Better Contrast */
   .dashboard-card {
     @apply bg-white border border-blue-300 shadow-lg;
@@ -598,4 +626,120 @@
   .dark .progress-fill {
     @apply bg-indigo-400;
   }
+}
+
+/* ===== ENHANCED UI THEME & CONTRASTS ===== */
+@layer components {
+  /* Card enhancements for better distinction from background */
+  .card-enhanced {
+    @apply shadow-md border border-border/60;
+    background-color: oklch(from var(--card) l c h / 0.98);
+  }
+
+  .dark .card-enhanced {
+    @apply shadow-lg border-border/40;
+    background-color: oklch(from var(--card) l c h / 0.95);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  }
+
+  /* Table styling improvements for better readability */
+  table thead {
+    @apply bg-muted/40 border-b-2 border-border/60;
+  }
+
+  .dark table thead {
+    @apply bg-muted/25 border-border/40;
+  }
+
+  table tbody tr {
+    @apply border-b border-border/40 hover:bg-muted/30 transition-colors;
+  }
+
+  .dark table tbody tr {
+    @apply border-border/25 hover:bg-muted/15;
+  }
+
+  /* Stronger borders for dashed/dotted elements (like IP checker) */
+  .border-dashed-strong {
+    border-style: dashed;
+    border-width: 2px;
+    @apply border-primary/50;
+  }
+
+  .dark .border-dashed-strong {
+    @apply border-primary/40;
+  }
+
+  /* Enhanced input field visibility */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    @apply bg-background/90 backdrop-blur-sm border-border/70;
+  }
+
+  .dark input:not([type="checkbox"]):not([type="radio"]),
+  .dark textarea,
+  .dark select {
+    @apply bg-background/60 border-border/50;
+  }
+
+  input:focus:not([type="checkbox"]):not([type="radio"]),
+  textarea:focus,
+  select:focus {
+    @apply border-primary/70 ring-2 ring-primary/25;
+  }
+
+  /* Dialog and popover enhancements */
+  [role="dialog"] {
+    @apply bg-card/98 backdrop-blur-xl shadow-2xl border-border/60;
+  }
+
+  .dark [role="dialog"] {
+    @apply bg-card/95 shadow-2xl border-border/40;
+  }
+
+  /* Separator lines visibility */
+  hr {
+    @apply border-t-2 border-border/50;
+  }
+
+  .dark hr {
+    @apply border-border/30;
+  }
+}
+
+/* Enhanced Progress Bar Animation */
+@keyframes progress-glow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(59, 130, 246, 0.9), 0 0 36px rgba(59, 130, 246, 0.5);
+  }
+}
+
+.animate-progress-glow {
+  animation: progress-glow 2.5s ease-in-out infinite;
+}
+
+/* Bulk selection row highlighting */
+tr.bulk-selected {
+  @apply bg-primary/8 border-l-4 border-l-primary/80;
+}
+
+.dark tr.bulk-selected {
+  @apply bg-primary/12 border-l-primary/70;
+}
+
+/* Enhanced card shadows for floating effect */
+.card-float {
+  @apply transition-all duration-300;
+}
+
+.card-float:hover {
+  @apply shadow-lg transform -translate-y-0.5;
+}
+
+.dark .card-float:hover {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
 }

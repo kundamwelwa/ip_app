@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create equipment
-        await prisma.equipment.create({
+        const newEquipment = await prisma.equipment.create({
           data: {
             name: item.name,
             type: item.type.toUpperCase(),
@@ -67,17 +67,121 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Handle IP Addresses Assignment (supports multiple IPs per equipment)
+        const ipAddresses = item.ipAddresses || (item.ipAddress ? [item.ipAddress] : []);
+        
+        if (ipAddresses.length > 0) {
+          // Process all IP addresses for this equipment
+          for (const ipData of ipAddresses) {
+            try {
+              // Handle both object format { address, subnet, gateway, ... } and string format
+              const ipAddress = typeof ipData === 'string' ? ipData : ipData.address;
+              const subnet = typeof ipData === 'object' ? (ipData.subnet || '255.255.255.0') : '255.255.255.0';
+              const gateway = typeof ipData === 'object' ? (ipData.gateway || null) : null;
+              const dns = typeof ipData === 'object' ? (ipData.dns || null) : null;
+              const ipNotes = typeof ipData === 'object' ? (ipData.notes || null) : null;
+
+              if (!ipAddress) {
+                results.errors.push(`Equipment ${item.name}: Invalid IP address data`);
+                continue;
+              }
+
+              // Check if IP address already exists
+              let ipRecord = await prisma.iPAddress.findUnique({
+                where: { address: ipAddress },
+                include: {
+                  assignments: {
+                    where: { isActive: true },
+                    include: { equipment: { select: { name: true } } }
+                  }
+                }
+              });
+
+              if (ipRecord) {
+                // IP exists - check if it's already assigned
+                if (ipRecord.status === 'ASSIGNED' && ipRecord.assignments.length > 0) {
+                  const assignedTo = ipRecord.assignments[0].equipment?.name || 'unknown';
+                  results.errors.push(
+                    `Equipment ${item.name}: IP ${ipAddress} is already assigned to "${assignedTo}"`
+                  );
+                  continue;
+                }
+
+                // Update existing IP record
+                ipRecord = await prisma.iPAddress.update({
+                  where: { id: ipRecord.id },
+                  data: {
+                    status: 'ASSIGNED',
+                    subnet: subnet,
+                    gateway: gateway,
+                    dns: dns,
+                    notes: ipNotes || ipRecord.notes,
+                  }
+                });
+              } else {
+                // Create new IP address record
+                ipRecord = await prisma.iPAddress.create({
+                  data: {
+                    address: ipAddress,
+                    subnet: subnet,
+                    gateway: gateway,
+                    dns: dns,
+                    notes: ipNotes,
+                    status: 'ASSIGNED',
+                    isReserved: false
+                  }
+                });
+              }
+
+              // Create IP assignment linking equipment to IP
+              await prisma.iPAssignment.create({
+                data: {
+                  ipAddressId: ipRecord.id,
+                  equipmentId: newEquipment.id,
+                  userId: session.user?.id || "system",
+                  isActive: true,
+                  notes: ipNotes || `Imported with equipment ${item.name}`
+                }
+              });
+
+              // Create audit log for IP assignment
+              await prisma.auditLog.create({
+                data: {
+                  action: "IP_ASSIGNED",
+                  entityType: "IP_ADDRESS",
+                  entityId: ipRecord.id,
+                  userId: session.user?.id || "system",
+                  ipAddressId: ipRecord.id,
+                  equipmentId: newEquipment.id,
+                  details: {
+                    ipAddress: ipAddress,
+                    equipmentName: item.name,
+                    imported: true
+                  }
+                }
+              });
+            } catch (ipError) {
+              const ipAddress = typeof ipData === 'string' ? ipData : ipData?.address || 'unknown';
+              results.errors.push(
+                `Equipment ${item.name}: Failed to create/assign IP ${ipAddress}: ${ipError instanceof Error ? ipError.message : 'Unknown error'}`
+              );
+            }
+          }
+        }
+
         // Create audit log
         await prisma.auditLog.create({
           data: {
             action: "EQUIPMENT_IMPORTED",
             entityType: "EQUIPMENT",
-            entityId: item.name,
+            entityId: newEquipment.id,
             userId: session.user?.id || "system",
+            equipmentId: newEquipment.id,
             details: {
               name: item.name,
               type: item.type,
               importedBy: session.user?.email,
+              ipAddressCount: ipAddresses.length,
             },
           },
         });

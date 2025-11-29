@@ -72,18 +72,24 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ImportExportDialog } from "./import-export-dialog";
+import { EnhancedImportDialog } from "../import-export/enhanced-import-dialog";
+import { EnhancedExportDialog } from "../import-export/enhanced-export-dialog";
 import { IPAddressTagInput } from "./ip-address-tag-input";
 import { MiningEquipment, EquipmentFormData, IPAddressInput } from "@/types/equipment";
 import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
 import { getTimeAgo, calculateUptime, formatDateForDisplay } from "@/lib/time-utils";
 import { getSignalStrengthColor, getUptimeColor } from "@/lib/real-time-data";
 import { isEquipmentFeatureEnabled } from "@/lib/feature-flags";
+import { BulkActionToolbar, BulkSelectCheckbox } from "@/components/ui/bulk-action-toolbar";
+import { BulkConfirmationDialog, BulkConfirmationItem } from "@/components/ui/bulk-confirmation-dialog";
+import { exportSelectedEquipment } from "@/lib/export-utils";
+import { AdvancedFilters, ActiveFilter } from "@/components/ui/advanced-filters";
 
 // Equipment types and form data are now imported from types/equipment.ts
 
 export function MiningEquipmentDashboard() {
   const [equipment, setEquipment] = useState<MiningEquipment[]>([]);
+  const [totalEquipmentCount, setTotalEquipmentCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -91,10 +97,11 @@ export function MiningEquipmentDashboard() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false);
+  const [isEnhancedImportDialogOpen, setIsEnhancedImportDialogOpen] = useState(false);
+  const [isEnhancedExportDialogOpen, setIsEnhancedExportDialogOpen] = useState(false);
   const [editingEquipment, setEditingEquipment] = useState<MiningEquipment | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
+
   // Custom alerts and confirmation dialogs
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; equipmentId: string | null; equipmentName: string | null }>({
@@ -102,7 +109,15 @@ export function MiningEquipmentDashboard() {
     equipmentId: null,
     equipmentName: null,
   });
-  
+
+  // Bulk selection state
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Advanced filters state
+  const [advancedFilters, setAdvancedFilters] = useState<ActiveFilter[]>([]);
+
   // Real-time monitoring
   const {
     equipmentStatuses,
@@ -116,7 +131,7 @@ export function MiningEquipmentDashboard() {
     getOnlineCount,
     getOfflineCount,
   } = useEquipmentMonitoring();
-  
+
   const [formData, setFormData] = useState<EquipmentFormData>({
     name: "",
     type: "",
@@ -133,7 +148,7 @@ export function MiningEquipmentDashboard() {
     numberOfIPs: 1,
     ipAddresses: [],
   });
-  
+
   // Store IP addresses as simple strings for the tag input
   const [ipAddressStrings, setIpAddressStrings] = useState<string[]>([]);
 
@@ -164,24 +179,30 @@ export function MiningEquipmentDashboard() {
 
   // Fetch real equipment data from API
   const fetchEquipmentData = async (useRealTime = false) => {
-      setIsLoading(true);
-      try {
-        setError(null);
-      const url = useRealTime ? "/api/equipment?realTime=true" : "/api/equipment";
+    setIsLoading(true);
+    try {
+      setError(null);
+      // Fetch ALL equipment by using a high limit
+      const url = useRealTime 
+        ? "/api/equipment?realTime=true&limit=10000" 
+        : "/api/equipment?limit=10000";
       const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error("Failed to fetch equipment data");
-        }
-        const data = await response.json();
-        // Handle both direct array and paginated response
-        setEquipment(data.equipment || data || []);
-      } catch (error) {
-        console.error("Failed to fetch equipment data:", error);
-        setError(error instanceof Error ? error.message : "An error occurred");
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error("Failed to fetch equipment data");
       }
-    };
+      const data = await response.json();
+      // Handle both direct array and paginated response
+      const equipmentList = data.equipment || data || [];
+      setEquipment(equipmentList);
+      // Use pagination total if available, otherwise use array length
+      setTotalEquipmentCount(data.pagination?.total || equipmentList.length);
+    } catch (error) {
+      console.error("Failed to fetch equipment data:", error);
+      setError(error instanceof Error ? error.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchEquipmentData();
@@ -191,11 +212,11 @@ export function MiningEquipmentDashboard() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const ipToAdd = urlParams.get('addIP');
-    
+
     if (ipToAdd) {
       // Open the add dialog
       setIsAddDialogOpen(true);
-      
+
       // Pre-configure for IP assignment
       setIpAddressStrings([ipToAdd]);
 
@@ -258,7 +279,7 @@ export function MiningEquipmentDashboard() {
   // Get accurate online count combining database and real-time data
   const getAccurateOnlineCount = () => {
     if (!equipment) return 0;
-    
+
     return equipment.filter(item => {
       const realTimeStatus = getRealTimeStatus(item.id);
       if (realTimeStatus) {
@@ -272,7 +293,7 @@ export function MiningEquipmentDashboard() {
   // Get accurate offline count combining database and real-time data
   const getAccurateOfflineCount = () => {
     if (!equipment) return 0;
-    
+
     return equipment.filter(item => {
       const realTimeStatus = getRealTimeStatus(item.id);
       if (realTimeStatus) {
@@ -309,12 +330,36 @@ export function MiningEquipmentDashboard() {
 
   const filteredEquipment = (equipment || []).filter(item => {
     const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         item.operator?.toLowerCase().includes(searchTerm.toLowerCase());
+      item.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.operator?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === "all" || item.type === filterType;
     const matchesStatus = filterStatus === "all" || item.status === filterStatus;
-    
-    return matchesSearch && matchesType && matchesStatus;
+
+    // Advanced filters
+    const matchesAdvancedFilters = advancedFilters.every(filter => {
+      switch (filter.id) {
+        case "manufacturer":
+          return item.manufacturer?.toLowerCase() === filter.value.toLowerCase();
+        case "location":
+          return item.location?.toLowerCase().includes(filter.value.toLowerCase()) || false;
+        case "operator":
+          return item.operator?.toLowerCase().includes(filter.value.toLowerCase()) || false;
+        case "ipAssignment":
+          if (filter.value === "assigned") {
+            const ips = getIPAssignments(item.id);
+            return ips.length > 0;
+          }
+          if (filter.value === "unassigned") {
+            const ips = getIPAssignments(item.id);
+            return ips.length === 0;
+          }
+          return true;
+        default:
+          return true;
+      }
+    });
+
+    return matchesSearch && matchesType && matchesStatus && matchesAdvancedFilters;
   });
 
   const handleAddEquipment = async () => {
@@ -417,7 +462,7 @@ export function MiningEquipmentDashboard() {
       }
 
       const updatedEquipment = await response.json();
-      setEquipment((equipment || []).map(item => 
+      setEquipment((equipment || []).map(item =>
         item.id === editingEquipment.id ? updatedEquipment : item
       ));
       setIsEditDialogOpen(false);
@@ -451,9 +496,13 @@ export function MiningEquipmentDashboard() {
         throw new Error(errorData.error || "Failed to delete equipment");
       }
 
-      setEquipment((equipment || []).filter(item => item.id !== deleteConfirmation.equipmentId));
+      const equipmentName = deleteConfirmation.equipmentName;
       setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null });
-      showToast(`Equipment "${deleteConfirmation.equipmentName}" deleted successfully!`, "success");
+      
+      // Refresh equipment data from server to ensure UI is in sync
+      await fetchEquipmentData();
+      
+      showToast(`Equipment "${equipmentName}" deleted successfully!`, "success");
     } catch (error) {
       console.error("Failed to delete equipment:", error);
       showToast(error instanceof Error ? error.message : "Failed to delete equipment. Please try again.", "error");
@@ -495,6 +544,76 @@ export function MiningEquipmentDashboard() {
     return `${hours.toLocaleString()} hrs`;
   };
 
+  // Bulk selection handlers
+  const handleSelectAllEquipment = () => {
+    if (selectedEquipmentIds.size === filteredEquipment.length) {
+      setSelectedEquipmentIds(new Set());
+    } else {
+      setSelectedEquipmentIds(new Set(filteredEquipment.map(eq => eq.id)));
+    }
+  };
+
+  const handleSelectEquipment = (equipmentId: string) => {
+    const newSelected = new Set(selectedEquipmentIds);
+    if (newSelected.has(equipmentId)) {
+      newSelected.delete(equipmentId);
+    } else {
+      newSelected.add(equipmentId);
+    }
+    setSelectedEquipmentIds(newSelected);
+  };
+
+  const handleClearEquipmentSelection = () => {
+    setSelectedEquipmentIds(new Set());
+  };
+
+  // Bulk delete handler
+  const handleBulkDeleteEquipment = async () => {
+    try {
+      setBulkActionLoading(true);
+      const response = await fetch("/api/equipment/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ equipmentIds: Array.from(selectedEquipmentIds) }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete equipment");
+      }
+
+      const result = await response.json();
+      showToast(result.message || "Equipment deleted successfully", "success");
+      await fetchEquipmentData();
+      setSelectedEquipmentIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete equipment";
+      showToast(errorMessage, "error");
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  // Export selected equipment
+  const handleExportSelectedEquipment = () => {
+    const selectedEquipment = equipment.filter(eq => selectedEquipmentIds.has(eq.id));
+    exportSelectedEquipment(selectedEquipment, `selected-equipment-${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast(`Exported ${selectedEquipment.length} equipment item${selectedEquipment.length !== 1 ? 's' : ''}`, "success");
+  };
+
+  // Get selected equipment items for confirmation dialog
+  const getSelectedEquipmentItems = (): BulkConfirmationItem[] => {
+    return equipment
+      .filter(eq => selectedEquipmentIds.has(eq.id))
+      .map(eq => ({
+        id: eq.id,
+        label: eq.name,
+        sublabel: `${eq.type} - ${eq.serialNumber || 'No S/N'}`,
+        status: eq.status,
+      }));
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -534,8 +653,8 @@ export function MiningEquipmentDashboard() {
               Error Loading Equipment Data
             </h3>
             <p className="text-red-700 dark:text-red-300 mb-4">{error}</p>
-            <Button 
-              onClick={() => window.location.reload()} 
+            <Button
+              onClick={() => window.location.reload()}
               variant="outline"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -561,8 +680,8 @@ export function MiningEquipmentDashboard() {
           {/* Real-time monitoring controls */}
           <div className="flex gap-2">
             {isEquipmentFeatureEnabled("showRefreshButton") && (
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={handleRefreshAll}
                 disabled={isRefreshing}
@@ -572,7 +691,7 @@ export function MiningEquipmentDashboard() {
               </Button>
             )}
             {isEquipmentFeatureEnabled("showStartStopButtons") && (
-              <Button 
+              <Button
                 variant={monitoringStatus.isRunning ? "destructive" : "default"}
                 size="sm"
                 onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring(30000)}
@@ -591,29 +710,29 @@ export function MiningEquipmentDashboard() {
               </Button>
             )}
           </div>
-          
+
           {isEquipmentFeatureEnabled("showImportExportButtons") && (
             <>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   console.log("Export button clicked");
-                  setIsImportExportDialogOpen(true);
-                }}
-              >
-                <Download className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Export</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  console.log("Import button clicked");
-                  setIsImportExportDialogOpen(true);
+                  setIsEnhancedExportDialogOpen(true);
                 }}
               >
                 <Upload className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  console.log("Import button clicked");
+                  setIsEnhancedImportDialogOpen(true);
+                }}
+              >
+                <Download className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Import</span>
               </Button>
             </>
@@ -640,7 +759,7 @@ export function MiningEquipmentDashboard() {
                       <HardHat className="h-5 w-5 text-primary" />
                       <h3 className="font-semibold text-base">Basic Information</h3>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Tooltip>
@@ -656,7 +775,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="name"
                           value={formData.name}
-                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                           placeholder="Haul Truck 01"
                           required
                         />
@@ -672,7 +791,7 @@ export function MiningEquipmentDashboard() {
                             <p>Select the category of equipment</p>
                           </TooltipContent>
                         </Tooltip>
-                        <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
+                        <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select type" />
                           </SelectTrigger>
@@ -692,7 +811,7 @@ export function MiningEquipmentDashboard() {
                       <Network className="h-5 w-5 text-primary" />
                       <h3 className="font-semibold text-base">Network Configuration</h3>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -718,7 +837,7 @@ export function MiningEquipmentDashboard() {
                       <Wrench className="h-5 w-5 text-primary" />
                       <h3 className="font-semibold text-base">Equipment Details</h3>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Tooltip>
@@ -731,7 +850,7 @@ export function MiningEquipmentDashboard() {
                             <p>Select the equipment manufacturer</p>
                           </TooltipContent>
                         </Tooltip>
-                        <Select value={formData.manufacturer} onValueChange={(value) => setFormData({...formData, manufacturer: value})}>
+                        <Select value={formData.manufacturer} onValueChange={(value) => setFormData({ ...formData, manufacturer: value })}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select manufacturer" />
                           </SelectTrigger>
@@ -756,7 +875,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="model"
                           value={formData.model}
-                          onChange={(e) => setFormData({...formData, model: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                           placeholder="797F"
                         />
                       </div>
@@ -777,7 +896,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="serialNumber"
                           value={formData.serialNumber}
-                          onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
                           placeholder="CAT797F-001"
                         />
                       </div>
@@ -795,7 +914,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="macAddress"
                           value={formData.macAddress}
-                          onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
                           placeholder="00:1A:2B:3C:4D:5E"
                           className="font-mono"
                         />
@@ -809,7 +928,7 @@ export function MiningEquipmentDashboard() {
                       <MapPin className="h-5 w-5 text-primary" />
                       <h3 className="font-semibold text-base">Location & Assignment</h3>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Tooltip>
@@ -825,7 +944,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="location"
                           value={formData.location}
-                          onChange={(e) => setFormData({...formData, location: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                           placeholder="Pit A - Level 3"
                         />
                       </div>
@@ -843,7 +962,7 @@ export function MiningEquipmentDashboard() {
                         <Input
                           id="operator"
                           value={formData.operator}
-                          onChange={(e) => setFormData({...formData, operator: e.target.value})}
+                          onChange={(e) => setFormData({ ...formData, operator: e.target.value })}
                           placeholder="John Smith"
                         />
                       </div>
@@ -863,7 +982,7 @@ export function MiningEquipmentDashboard() {
                       <Textarea
                         id="notes"
                         value={formData.notes}
-                        onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                         placeholder="Additional notes..."
                         rows={3}
                       />
@@ -893,7 +1012,7 @@ export function MiningEquipmentDashboard() {
               <Truck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-between">
-              <div className="text-xl sm:text-2xl font-bold">{equipment?.length || 0}</div>
+              <div className="text-xl sm:text-2xl font-bold">{totalEquipmentCount || equipment?.length || 0}</div>
               <p className="text-xs text-muted-foreground line-clamp-1">
                 Active equipment
               </p>
@@ -1030,49 +1149,93 @@ export function MiningEquipmentDashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4">
-            <div className="flex-1 min-w-0">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search equipment..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search equipment..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 sm:gap-3">
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[140px] sm:w-40">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {equipmentTypes.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[140px] sm:w-40">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                    <SelectItem value="offline">Offline</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="idle">Idle</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <div className="flex gap-2 sm:gap-3">
-            <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-[140px] sm:w-40">
-                  <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                {equipmentTypes.map(type => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[140px] sm:w-40">
-                  <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="idle">Idle</SelectItem>
-              </SelectContent>
-            </Select>
-            </div>
+
+            {/* Advanced Filters */}
+            <AdvancedFilters
+              filters={[
+                {
+                  id: "manufacturer",
+                  label: "Manufacturer",
+                  type: "select",
+                  options: manufacturers.map(m => ({ value: m, label: m })),
+                },
+                {
+                  id: "location",
+                  label: "Location",
+                  type: "text",
+                  placeholder: "Filter by location",
+                },
+                {
+                  id: "operator",
+                  label: "Operator",
+                  type: "text",
+                  placeholder: "Filter by operator name",
+                },
+                {
+                  id: "ipAssignment",
+                  label: "IP Assignment",
+                  type: "select",
+                  options: [
+                    { value: "assigned", label: "Has IP Address" },
+                    { value: "unassigned", label: "No IP Address" },
+                  ],
+                },
+              ]}
+              activeFilters={advancedFilters}
+              onApplyFilters={setAdvancedFilters}
+              onClearFilters={() => setAdvancedFilters([])}
+            />
           </div>
 
           <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <BulkSelectCheckbox
+                      checked={selectedEquipmentIds.size > 0 && selectedEquipmentIds.size === filteredEquipment.length}
+                      onCheckedChange={handleSelectAllEquipment}
+                    />
+                  </TableHead>
                   <TableHead className="min-w-[180px]">Equipment</TableHead>
                   <TableHead className="min-w-[100px]">Type</TableHead>
                   <TableHead className="min-w-[140px]">IP Address</TableHead>
@@ -1091,217 +1254,226 @@ export function MiningEquipmentDashboard() {
                     <TableHead className="min-w-[140px]">Last Seen</TableHead>
                   )}
                   <TableHead className="min-w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEquipment.map((item) => {
-                const realTimeStatus = getRealTimeStatus(item.id);
-                const isOnline = realTimeStatus ? realTimeStatus.isOnline : item.status === "ONLINE";
-                const responseTime = realTimeStatus?.responseTime;
-                const lastSeen = realTimeStatus ? realTimeStatus.lastSeen : item.lastSeen;
-                const signalStrength = realTimeStatus ? Math.max(0, 100 - (responseTime || 0) / 10) : (item.meshStrength || 0);
-                
-                return (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <HardHat className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        <div className="text-sm text-muted-foreground">{item.serialNumber}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{item.type}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const ipAddresses = getIPAssignments(item.id);
-                      if (ipAddresses.length === 0) {
-                        return (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-muted-foreground">Not assigned</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleAssignIP(item.id)}
-                              className="h-6 w-6 p-0"
-                              title="Assign IP Address"
-                            >
-                              <Link className="h-3 w-3 text-green-500" />
-                            </Button>
-                          </div>
-                        );
-                      }
-                      
-                      if (ipAddresses.length === 1) {
-                        return (
-                          <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="font-mono text-xs">
-                              {ipAddresses[0].address}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUnassignIP(item.id)}
-                              className="h-6 w-6 p-0"
-                              title="Unassign IP Address"
-                            >
-                              <Unlink className="h-3 w-3 text-red-500" />
-                            </Button>
-                          </div>
-                        );
-                      }
-                      
-                      // Multiple IP addresses - show first one with indicator
-                      return (
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredEquipment.map((item) => {
+                  const realTimeStatus = getRealTimeStatus(item.id);
+                  const isOnline = realTimeStatus ? realTimeStatus.isOnline : item.status === "ONLINE";
+                  const responseTime = realTimeStatus?.responseTime;
+                  const lastSeen = realTimeStatus ? realTimeStatus.lastSeen : item.lastSeen;
+                  const signalStrength = realTimeStatus ? Math.max(0, 100 - (responseTime || 0) / 10) : (item.meshStrength || 0);
+
+                  return (
+                    <TableRow
+                      key={item.id}
+                      className={selectedEquipmentIds.has(item.id) ? "bg-muted/50" : ""}
+                    >
+                      <TableCell>
+                        <BulkSelectCheckbox
+                          checked={selectedEquipmentIds.has(item.id)}
+                          onCheckedChange={() => handleSelectEquipment(item.id)}
+                        />
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Badge variant="outline" className="font-mono text-xs">
-                            {ipAddresses[0].address}
-                          </Badge>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:bg-accent hover:text-accent-foreground h-6 px-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600">
-                                <Network className="h-3 w-3 mr-1" />
-                                +{ipAddresses.length - 1} more
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-80" align="start">
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <h4 className="font-semibold text-sm flex items-center gap-2">
-                                    <Network className="h-4 w-4 text-blue-500" />
-                                    All IP Addresses ({ipAddresses.length})
-                                  </h4>
-                                </div>
-                                <div className="space-y-2 max-h-60 overflow-y-auto">
-                                  {ipAddresses.map((ip, index) => (
-                                    <div 
-                                      key={ip.id} 
-                                      className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 text-xs font-semibold">
-                                          {index + 1}
-                                        </div>
-                                        <span className="font-mono text-sm font-medium">{ip.address}</span>
-                                      </div>
-                                      <Badge variant="outline" className="text-xs">
-                                        {ip.status}
-                                      </Badge>
-                                    </div>
-                                  ))}
-                                </div>
+                          <HardHat className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">{item.serialNumber}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{item.type}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const ipAddresses = getIPAssignments(item.id);
+                          if (ipAddresses.length === 0) {
+                            return (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-muted-foreground">Not assigned</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleAssignIP(item.id)}
+                                  className="h-6 w-6 p-0"
+                                  title="Assign IP Address"
+                                >
+                                  <Link className="h-3 w-3 text-green-500" />
+                                </Button>
                               </div>
-                            </PopoverContent>
-                          </Popover>
+                            );
+                          }
+
+                          if (ipAddresses.length === 1) {
+                            return (
+                              <div className="flex items-center space-x-2">
+                                <Badge variant="outline" className="font-mono text-xs">
+                                  {ipAddresses[0].address}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUnassignIP(item.id)}
+                                  className="h-6 w-6 p-0"
+                                  title="Unassign IP Address"
+                                >
+                                  <Unlink className="h-3 w-3 text-red-500" />
+                                </Button>
+                              </div>
+                            );
+                          }
+
+                          // Multiple IP addresses - show first one with indicator
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {ipAddresses[0].address}
+                              </Badge>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:bg-accent hover:text-accent-foreground h-6 px-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm hover:from-blue-600 hover:to-indigo-600">
+                                    <Network className="h-3 w-3 mr-1" />
+                                    +{ipAddresses.length - 1} more
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80" align="start">
+                                  <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                                        <Network className="h-4 w-4 text-blue-500" />
+                                        All IP Addresses ({ipAddresses.length})
+                                      </h4>
+                                    </div>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                      {ipAddresses.map((ip, index) => (
+                                        <div
+                                          key={ip.id}
+                                          className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-muted transition-colors"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 text-xs font-semibold">
+                                              {index + 1}
+                                            </div>
+                                            <span className="font-mono text-sm font-medium">{ip.address}</span>
+                                          </div>
+                                          <Badge variant="outline" className="text-xs">
+                                            {ip.status}
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUnassignIP(item.id)}
+                                className="h-6 w-6 p-0"
+                                title="Manage IP Addresses"
+                              >
+                                <Unlink className="h-3 w-3 text-red-500" />
+                              </Button>
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+                      {isEquipmentFeatureEnabled("showRealTimeStatusColumn") && (
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Badge className={isOnline ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}>
+                              {isOnline ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                              <span className="text-xs">{isOnline ? "ONLINE" : "OFFLINE"}</span>
+                            </Badge>
+                            {realTimeStatus && (
+                              <div className="flex items-center space-x-1">
+                                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                                <span className="text-xs text-muted-foreground">Live</span>
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                      {isEquipmentFeatureEnabled("showResponseTimeColumn") && (
+                        <TableCell>
+                          {responseTime ? (
+                            <div className="flex items-center space-x-1">
+                              <Timer className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-sm font-mono">{responseTime}ms</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">N/A</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {isEquipmentFeatureEnabled("showSignalStrengthColumn") && (
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Signal className={`h-3 w-3 ${getSignalStrengthColor(signalStrength)}`} />
+                            <span className="text-sm font-medium">{Math.round(signalStrength)}%</span>
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
+                          <MapPin className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm">{item.location || "Unknown"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm">{item.operator || "Unassigned"}</TableCell>
+                      {isEquipmentFeatureEnabled("showLastSeenColumn") && (
+                        <TableCell>
+                          <div className="text-sm">
+                            {lastSeen ? (
+                              <div>
+                                <div className="font-medium">{formatDateForDisplay(lastSeen, 'short')}</div>
+                                <div className="text-xs text-muted-foreground">{getTimeAgo(lastSeen).fullText}</div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">Never</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleUnassignIP(item.id)}
-                            className="h-6 w-6 p-0"
-                            title="Manage IP Addresses"
+                            onClick={() => checkEquipment(item.id)}
+                            className="h-8 w-8 p-0"
+                            title="Refresh Status"
                           >
-                            <Unlink className="h-3 w-3 text-red-500" />
+                            <RefreshCw className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditEquipment(item)}
+                            className="h-8 w-8 p-0"
+                            title="Edit Equipment"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClick(item)}
+                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                            title="Delete Equipment"
+                          >
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
-                      );
-                    })()}
-                  </TableCell>
-                    {isEquipmentFeatureEnabled("showRealTimeStatusColumn") && (
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Badge className={isOnline ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"}>
-                            {isOnline ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                            <span className="text-xs">{isOnline ? "ONLINE" : "OFFLINE"}</span>
-                      </Badge>
-                          {realTimeStatus && (
-                            <div className="flex items-center space-x-1">
-                              <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                              <span className="text-xs text-muted-foreground">Live</span>
-                            </div>
-                          )}
-                        </div>
-                    </TableCell>
-                    )}
-                    {isEquipmentFeatureEnabled("showResponseTimeColumn") && (
-                      <TableCell>
-                        {responseTime ? (
-                      <div className="flex items-center space-x-1">
-                            <Timer className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-sm font-mono">{responseTime}ms</span>
-                      </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">N/A</span>
-                        )}
-                    </TableCell>
-                    )}
-                    {isEquipmentFeatureEnabled("showSignalStrengthColumn") && (
-                      <TableCell>
-                      <div className="flex items-center space-x-2">
-                          <Signal className={`h-3 w-3 ${getSignalStrengthColor(signalStrength)}`} />
-                          <span className="text-sm font-medium">{Math.round(signalStrength)}%</span>
-                        </div>
                       </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex items-center space-x-1">
-                        <MapPin className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm">{item.location || "Unknown"}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{item.operator || "Unassigned"}</TableCell>
-                    {isEquipmentFeatureEnabled("showLastSeenColumn") && (
-                      <TableCell>
-                        <div className="text-sm">
-                          {lastSeen ? (
-                            <div>
-                              <div className="font-medium">{formatDateForDisplay(lastSeen, 'short')}</div>
-                              <div className="text-xs text-muted-foreground">{getTimeAgo(lastSeen).fullText}</div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">Never</span>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex items-center space-x-1">
-                      <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => checkEquipment(item.id)}
-                          className="h-8 w-8 p-0"
-                          title="Refresh Status"
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditEquipment(item)}
-                          className="h-8 w-8 p-0"
-                          title="Edit Equipment"
-                      >
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                      <Button
-                          variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteClick(item)}
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                          title="Delete Equipment"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
@@ -1322,13 +1494,13 @@ export function MiningEquipmentDashboard() {
                 <Input
                   id="edit-name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Haul Truck CAT 797F"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-type">Equipment Type</Label>
-                <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value})}>
+                <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
@@ -1346,13 +1518,13 @@ export function MiningEquipmentDashboard() {
                 <Input
                   id="edit-model"
                   value={formData.model}
-                  onChange={(e) => setFormData({...formData, model: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                   placeholder="e.g., 797F"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-manufacturer">Manufacturer</Label>
-                <Select value={formData.manufacturer} onValueChange={(value) => setFormData({...formData, manufacturer: value})}>
+                <Select value={formData.manufacturer} onValueChange={(value) => setFormData({ ...formData, manufacturer: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select manufacturer" />
                   </SelectTrigger>
@@ -1370,7 +1542,7 @@ export function MiningEquipmentDashboard() {
                 <Input
                   id="edit-serialNumber"
                   value={formData.serialNumber}
-                  onChange={(e) => setFormData({...formData, serialNumber: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
                   placeholder="e.g., CAT797F-001"
                 />
               </div>
@@ -1379,7 +1551,7 @@ export function MiningEquipmentDashboard() {
                 <Input
                   id="edit-macAddress"
                   value={formData.macAddress}
-                  onChange={(e) => setFormData({...formData, macAddress: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, macAddress: e.target.value })}
                   placeholder="Will be assigned later if not provided"
                 />
               </div>
@@ -1389,7 +1561,7 @@ export function MiningEquipmentDashboard() {
               <Input
                 id="edit-location"
                 value={formData.location}
-                onChange={(e) => setFormData({...formData, location: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 placeholder="e.g., Pit A - Level 3"
               />
             </div>
@@ -1398,7 +1570,7 @@ export function MiningEquipmentDashboard() {
               <Input
                 id="edit-operator"
                 value={formData.operator}
-                onChange={(e) => setFormData({...formData, operator: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, operator: e.target.value })}
                 placeholder="e.g., John Smith"
               />
             </div>
@@ -1407,7 +1579,7 @@ export function MiningEquipmentDashboard() {
               <Textarea
                 id="edit-notes"
                 value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Additional notes about the equipment..."
                 rows={3}
               />
@@ -1424,14 +1596,26 @@ export function MiningEquipmentDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Import/Export Dialog */}
-      <ImportExportDialog
-        isOpen={isImportExportDialogOpen}
+      {/* Enhanced Import Dialog */}
+      <EnhancedImportDialog
+        isOpen={isEnhancedImportDialogOpen}
         onClose={() => {
-          console.log("Closing import/export dialog");
-          setIsImportExportDialogOpen(false);
+          console.log("Closing enhanced import dialog");
+          setIsEnhancedImportDialogOpen(false);
         }}
-        onImport={handleImportEquipment}
+        onSuccess={() => {
+          console.log("Import successful, refreshing equipment list");
+          fetchEquipmentData();
+        }}
+      />
+
+      {/* Enhanced Export Dialog */}
+      <EnhancedExportDialog
+        isOpen={isEnhancedExportDialogOpen}
+        onClose={() => {
+          console.log("Closing enhanced export dialog");
+          setIsEnhancedExportDialogOpen(false);
+        }}
         equipment={equipment}
       />
 
@@ -1487,28 +1671,25 @@ export function MiningEquipmentDashboard() {
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
-          <Card className={`min-w-[300px] shadow-lg border-2 ${
-            toast.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
-            toast.type === "error" ? "border-red-500 bg-red-50 dark:bg-red-950/30" :
-            "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-          }`}>
+          <Card className={`min-w-[300px] shadow-lg border-2 ${toast.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
+              toast.type === "error" ? "border-red-500 bg-red-50 dark:bg-red-950/30" :
+                "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+            }`}>
             <CardContent className="pt-4 pb-4">
               <div className="flex items-start space-x-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                  toast.type === "success" ? "bg-green-100 dark:bg-green-950/50" :
-                  toast.type === "error" ? "bg-red-100 dark:bg-red-950/50" :
-                  "bg-blue-100 dark:bg-blue-950/50"
-                }`}>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${toast.type === "success" ? "bg-green-100 dark:bg-green-950/50" :
+                    toast.type === "error" ? "bg-red-100 dark:bg-red-950/50" :
+                      "bg-blue-100 dark:bg-blue-950/50"
+                  }`}>
                   {toast.type === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
                   {toast.type === "error" && <XCircle className="h-5 w-5 text-red-600" />}
                   {toast.type === "info" && <AlertTriangle className="h-5 w-5 text-blue-600" />}
                 </div>
                 <div className="flex-1">
-                  <p className={`text-sm font-medium ${
-                    toast.type === "success" ? "text-green-900 dark:text-green-100" :
-                    toast.type === "error" ? "text-red-900 dark:text-red-100" :
-                    "text-blue-900 dark:text-blue-100"
-                  }`}>
+                  <p className={`text-sm font-medium ${toast.type === "success" ? "text-green-900 dark:text-green-100" :
+                      toast.type === "error" ? "text-red-900 dark:text-red-100" :
+                        "text-blue-900 dark:text-blue-100"
+                    }`}>
                     {toast.message}
                   </p>
                 </div>
@@ -1525,13 +1706,45 @@ export function MiningEquipmentDashboard() {
           </Card>
         </div>
       )}
-      
-      {/* Debug info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs">
-          Dialog Open: {isImportExportDialogOpen ? 'Yes' : 'No'}
-        </div>
-      )}
+
+      {/* Bulk Action Toolbar */}
+      <BulkActionToolbar
+        selectedCount={selectedEquipmentIds.size}
+        totalCount={filteredEquipment.length}
+        onClear={handleClearEquipmentSelection}
+        onSelectAll={handleSelectAllEquipment}
+        actions={[
+          {
+            id: "delete",
+            label: "Delete Selected",
+            icon: <Trash2 className="h-4 w-4" />,
+            variant: "destructive",
+            onClick: () => setBulkDeleteDialogOpen(true),
+          },
+          {
+            id: "export",
+            label: "Export Selection",
+            icon: <Download className="h-4 w-4" />,
+            variant: "outline",
+            onClick: handleExportSelectedEquipment,
+          },
+        ]}
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <BulkConfirmationDialog
+        isOpen={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        onConfirm={handleBulkDeleteEquipment}
+        title="Delete Equipment"
+        description="Are you sure you want to delete this equipment?"
+        items={getSelectedEquipmentItems()}
+        confirmText="Delete All"
+        variant="danger"
+        isLoading={bulkActionLoading}
+        warningMessage="⚠️ This action cannot be undone. All selected equipment and their IP assignments will be permanently removed from the system."
+      />
+
     </div>
   );
 }

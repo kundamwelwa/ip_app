@@ -280,7 +280,7 @@ export function IPChecker({
   };
 
   return (
-    <Card className="border-2 border-dashed border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
+    <Card className="border-2 border-dashed border-slate-300/80 dark:border-slate-600/70 bg-white dark:bg-slate-900/40 shadow-sm">
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Search className="h-5 w-5 text-primary" />

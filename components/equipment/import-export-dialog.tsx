@@ -27,8 +27,10 @@ import {
 } from "lucide-react";
 import {
   parseCSVToEquipment,
+  parseExcelToEquipment,
   validateEquipmentData,
   exportToCSV,
+  exportToExcel,
   downloadCSV,
   readFileAsText,
   type EquipmentImportData,
@@ -50,7 +52,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<EquipmentImportData[]>([]);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv');
+  const [exportFormat, setExportFormat] = useState<'csv' | 'json' | 'xlsx'>('xlsx');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,8 +63,26 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     setIsProcessing(true);
 
     try {
-      const content = await readFileAsText(file);
-      const data = parseCSVToEquipment(content);
+      let data: EquipmentImportData[] = [];
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        data = await parseExcelToEquipment(file);
+      } else {
+        const content = await readFileAsText(file);
+        data = parseCSVToEquipment(content);
+      }
+
+      if (data.length === 0) {
+        setImportResult({
+          success: false,
+          imported: 0,
+          errors: ["No valid equipment data found in the file. Please check the file format."],
+          warnings: []
+        });
+      } else {
+        setImportResult(null);
+      }
+
       setPreviewData(data);
       setImportData(data);
     } catch (error) {
@@ -80,7 +100,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
 
   const handleImport = async () => {
     setIsProcessing(true);
-    
+
     try {
       // Validate each item before sending
       const validationErrors: string[] = [];
@@ -124,13 +144,6 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
         errors: data.results.errors || [],
         warnings: []
       });
-
-      // If successful, refresh the equipment list
-      if (data.results.successful > 0) {
-        setTimeout(() => {
-          window.location.reload(); // Refresh the page to show new equipment
-        }, 2000);
-      }
     } catch (error) {
       console.error("Error importing equipment:", error);
       setImportResult({
@@ -144,10 +157,10 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     }
   };
 
-  const handleExport = async (format: 'csv' | 'json' = 'csv') => {
+  const handleExport = async (format: 'csv' | 'json' | 'xlsx' = 'xlsx') => {
     try {
       setIsProcessing(true);
-      
+
       const response = await fetch(`/api/equipment/export?format=${format}`, {
         method: 'GET',
         headers: {
@@ -159,7 +172,9 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
         throw new Error('Failed to export equipment');
       }
 
-      if (format === 'csv') {
+      if (format === 'xlsx') {
+        exportToExcel(equipment, `equipment-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+      } else if (format === 'csv') {
         // Download CSV
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -201,7 +216,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
     setImportResult(null);
     setSelectedFile(null);
     setPreviewData([]);
-    setExportFormat('csv');
+    setExportFormat('xlsx');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -266,9 +281,9 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
             <span>{activeTab === "import" ? "Import Equipment" : "Export Equipment"}</span>
           </DialogTitle>
           <DialogDescription>
-            {activeTab === "import" 
-              ? "Import equipment data from CSV file" 
-              : "Export equipment data to CSV file"
+            {activeTab === "import"
+              ? "Import equipment data from Excel or CSV file"
+              : "Export equipment data to Excel or CSV file"
             }
           </DialogDescription>
         </DialogHeader>
@@ -323,17 +338,17 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
 
               {/* File Upload */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Upload CSV File</h3>
+                <h3 className="text-lg font-semibold">Upload File</h3>
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
                   <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      Drag and drop your CSV file here, or click to browse
+                      Drag and drop your Excel or CSV file here, or click to browse
                     </p>
                     <Input
                       ref={fileInputRef}
                       type="file"
-                      accept=".csv"
+                      accept=".csv,.xlsx,.xls"
                       onChange={handleFileSelect}
                       className="hidden"
                     />
@@ -373,7 +388,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                     <h3 className="text-lg font-semibold">Preview Data</h3>
                     <Badge variant="outline">{previewData.length} items</Badge>
                   </div>
-                  
+
                   <div className="border rounded-lg overflow-hidden">
                     <div className="max-h-60 overflow-y-auto">
                       <table className="w-full text-sm">
@@ -417,36 +432,33 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
               {importResult && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">Import Result</h3>
-                  <div className={`p-4 rounded-lg border ${
-                    importResult.success 
-                      ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" 
-                      : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                  }`}>
+                  <div className={`p-4 rounded-lg border ${importResult.success
+                    ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                    }`}>
                     <div className="flex items-center space-x-2 mb-2">
                       {importResult.success ? (
                         <CheckCircle className="h-5 w-5 text-green-600" />
                       ) : (
                         <AlertTriangle className="h-5 w-5 text-red-600" />
                       )}
-                      <span className={`font-medium ${
-                        importResult.success 
-                          ? "text-green-800 dark:text-green-200" 
-                          : "text-red-800 dark:text-red-200"
-                      }`}>
+                      <span className={`font-medium ${importResult.success
+                        ? "text-green-800 dark:text-green-200"
+                        : "text-red-800 dark:text-red-200"
+                        }`}>
                         {importResult.success ? "Import Successful" : "Import Failed"}
                       </span>
                     </div>
-                    <p className={`text-sm ${
-                      importResult.success 
-                        ? "text-green-700 dark:text-green-300" 
-                        : "text-red-700 dark:text-red-300"
-                    }`}>
-                      {importResult.success 
+                    <p className={`text-sm ${importResult.success
+                      ? "text-green-700 dark:text-green-300"
+                      : "text-red-700 dark:text-red-300"
+                      }`}>
+                      {importResult.success
                         ? `Successfully imported ${importResult.imported} equipment items.`
                         : `Failed to import equipment. ${importResult.errors.length} errors found.`
                       }
                     </p>
-                    
+
                     {importResult.errors.length > 0 && (
                       <div className="mt-3">
                         <h4 className="font-medium text-red-800 dark:text-red-200 mb-2">Errors:</h4>
@@ -500,13 +512,28 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="p-4 border rounded-lg">
                     <h4 className="font-medium mb-2">Export Format</h4>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Choose between CSV or JSON format for export.
+                      Choose between Excel, CSV or JSON format for export.
                     </p>
                     <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="radio"
+                          id="xlsx-format"
+                          name="export-format"
+                          value="xlsx"
+                          checked={exportFormat === 'xlsx'}
+                          onChange={() => setExportFormat('xlsx')}
+                          className="h-4 w-4"
+                        />
+                        <label htmlFor="xlsx-format" className="text-sm cursor-pointer flex items-center space-x-2">
+                          <FileSpreadsheet className="h-4 w-4 text-primary" />
+                          <span>Excel Format (.xlsx)</span>
+                        </label>
+                      </div>
                       <div className="flex items-center space-x-2">
                         <input
                           type="radio"
@@ -518,8 +545,8 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                           className="h-4 w-4"
                         />
                         <label htmlFor="csv-format" className="text-sm cursor-pointer flex items-center space-x-2">
-                          <FileSpreadsheet className="h-4 w-4 text-primary" />
-                          <span>CSV Format (Excel Compatible)</span>
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span>CSV Format (.csv)</span>
                         </label>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -572,8 +599,8 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
                             </td>
                             <td className="p-2">
                               <Badge variant={
-                                (typeof item.status === 'string' ? item.status.toUpperCase() : item.status) === 'ONLINE' 
-                                  ? 'default' 
+                                (typeof item.status === 'string' ? item.status.toUpperCase() : item.status) === 'ONLINE'
+                                  ? 'default'
                                   : 'destructive'
                               }>
                                 {item.status}
@@ -603,8 +630,8 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
             Close
           </Button>
           {activeTab === "import" ? (
-            <Button 
-              onClick={handleImport} 
+            <Button
+              onClick={handleImport}
               disabled={importData.length === 0 || isProcessing}
             >
               {isProcessing ? (
@@ -620,7 +647,7 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
               )}
             </Button>
           ) : (
-            <Button 
+            <Button
               onClick={() => handleExport(exportFormat)}
               disabled={isProcessing || equipment.length === 0}
             >
