@@ -1,10 +1,6 @@
 <div align="center">
 
-<<<<<<< HEAD
-# IP Address Management System
-=======
 ## IP Address Management System
->>>>>>> f81508a7bfa0f497dc66aefc535f542a38c59462
 
 Adaptive equipment + IP governance platform built with Next.js 15, Prisma, and Tailwind CSS.
 
@@ -201,12 +197,7 @@ npx prisma migrate dev
 ## License
 
 Copyright © 2025.
-<<<<<<< HEAD
-
-This project is proprietary and not open-source. Contact the maintainers for usage permissions.
-=======
  
 This project is proprietary and not open-source. Contact the personbelow for usage permissions.
 
 [KellyCode-2464](#kellycodemwelwa@gmail.com)
->>>>>>> f81508a7bfa0f497dc66aefc535f542a38c59462
