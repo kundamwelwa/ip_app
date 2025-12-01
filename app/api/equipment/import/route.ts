@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
               }
 
               // Check if IP address already exists
-              let ipRecord = await prisma.iPAddress.findUnique({
+              const existingIP = await prisma.iPAddress.findUnique({
                 where: { address: ipAddress },
                 include: {
                   assignments: {
@@ -97,10 +97,12 @@ export async function POST(request: NextRequest) {
                 }
               });
 
-              if (ipRecord) {
+              let ipAddressId: string;
+
+              if (existingIP) {
                 // IP exists - check if it's already assigned
-                if (ipRecord.status === 'ASSIGNED' && ipRecord.assignments.length > 0) {
-                  const assignedTo = ipRecord.assignments[0].equipment?.name || 'unknown';
+                if (existingIP.status === 'ASSIGNED' && existingIP.assignments.length > 0) {
+                  const assignedTo = existingIP.assignments[0].equipment?.name || 'unknown';
                   results.errors.push(
                     `Equipment ${item.name}: IP ${ipAddress} is already assigned to "${assignedTo}"`
                   );
@@ -108,19 +110,20 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Update existing IP record
-                ipRecord = await prisma.iPAddress.update({
-                  where: { id: ipRecord.id },
+                await prisma.iPAddress.update({
+                  where: { id: existingIP.id },
                   data: {
                     status: 'ASSIGNED',
                     subnet: subnet,
                     gateway: gateway,
                     dns: dns,
-                    notes: ipNotes || ipRecord.notes,
+                    notes: ipNotes || existingIP.notes,
                   }
                 });
+                ipAddressId = existingIP.id;
               } else {
                 // Create new IP address record
-                ipRecord = await prisma.iPAddress.create({
+                const newIP = await prisma.iPAddress.create({
                   data: {
                     address: ipAddress,
                     subnet: subnet,
@@ -131,12 +134,13 @@ export async function POST(request: NextRequest) {
                     isReserved: false
                   }
                 });
+                ipAddressId = newIP.id;
               }
 
               // Create IP assignment linking equipment to IP
               await prisma.iPAssignment.create({
                 data: {
-                  ipAddressId: ipRecord.id,
+                  ipAddressId: ipAddressId,
                   equipmentId: newEquipment.id,
                   userId: session.user?.id || "system",
                   isActive: true,
@@ -149,9 +153,9 @@ export async function POST(request: NextRequest) {
                 data: {
                   action: "IP_ASSIGNED",
                   entityType: "IP_ADDRESS",
-                  entityId: ipRecord.id,
+                  entityId: ipAddressId,
                   userId: session.user?.id || "system",
-                  ipAddressId: ipRecord.id,
+                  ipAddressId: ipAddressId,
                   equipmentId: newEquipment.id,
                   details: {
                     ipAddress: ipAddress,

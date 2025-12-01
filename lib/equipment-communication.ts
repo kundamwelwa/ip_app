@@ -189,7 +189,7 @@ export async function checkEquipmentStatus(equipmentId: string): Promise<Equipme
     }
 
     // Check for weak mesh signal and create alert if needed
-    if (pingResult.isOnline && calculatedMeshStrength < 50) {
+    if (pingResult.isOnline && calculatedMeshStrength !== null && calculatedMeshStrength < 50) {
       await createWeakSignalAlert(equipmentId, calculatedMeshStrength);
     }
 

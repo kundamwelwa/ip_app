@@ -31,6 +31,7 @@ interface UserProfile {
   role: string;
   isActive: boolean;
   createdAt: string;
+  updatedAt?: string;
   profilePicture?: string;
   phoneNumber?: string;
   _count?: {
@@ -306,11 +307,18 @@ export function ProfileInfo({ profile, onUpdate, saving }: ProfileInfoProps) {
                   Last Updated
                 </Label>
                 <p className="text-sm py-2 px-3 bg-muted rounded-md">
-                  {new Date(profile.updatedAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  {profile.updatedAt 
+                    ? new Date(profile.updatedAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : new Date(profile.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                  }
                 </p>
               </div>
             </div>

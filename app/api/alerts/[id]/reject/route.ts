@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 // PATCH /api/alerts/[id]/reject - Reject alert (Admin only)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -22,12 +22,13 @@ export async function PATCH(
       );
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { reason } = body;
 
     // Check if alert exists
     const existingAlert = await prisma.alert.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingAlert) {
@@ -51,7 +52,7 @@ export async function PATCH(
 
     // Update alert
     const alert = await prisma.alert.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status: "REJECTED",
         rejectedBy: session.user.id,

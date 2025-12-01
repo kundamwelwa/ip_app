@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 // GET /api/alerts/[id] - Get specific alert
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,8 +14,10 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { id } = await params;
+
     const alert = await prisma.alert.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         equipment: true,
         ipAddress: true,
@@ -71,7 +73,7 @@ export async function GET(
 // DELETE /api/alerts/[id] - Delete alert (Admin only)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -87,8 +89,10 @@ export async function DELETE(
       );
     }
 
+    const { id } = await params;
+
     await prisma.alert.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     // Create audit log
@@ -96,7 +100,7 @@ export async function DELETE(
       data: {
         action: "ALERT_DELETED",
         entityType: "ALERT",
-        entityId: params.id,
+        entityId: id,
         userId: session.user.id,
         details: {},
       },
