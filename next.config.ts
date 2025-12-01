@@ -10,6 +10,21 @@ const nextConfig: NextConfig = {
     // Don't fail build on TypeScript errors (warnings only)
     ignoreBuildErrors: false,
   },
+  // Ensure CSS is processed correctly
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+  // Webpack configuration for CSS handling
+  webpack: (config, { isServer }) => {
+    // Ensure CSS is handled correctly
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;

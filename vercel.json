@@ -5,6 +5,11 @@
   "regions": ["iad1"],
   "env": {
     "PRISMA_GENERATE_DATAPROXY": "false"
+  },
+  "functions": {
+    "app/**/*.ts": {
+      "maxDuration": 30
+    }
   }
 }
 
