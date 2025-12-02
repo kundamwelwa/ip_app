@@ -10,10 +10,13 @@ export async function GET() {
   let migrationsApplied: string[] = [];
   
   try {
-    // Check if this is being run in production
-    if (process.env.NODE_ENV !== 'production') {
+    // Allow in production or when explicitly enabled
+    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_MIGRATE !== 'true') {
       return NextResponse.json(
-        { error: 'This endpoint only runs in production' },
+        {error: 'This endpoint only runs in production',
+          env: process.env.NODE_ENV,
+          hint: 'Set ENABLE_MIGRATE=true to run in other environments'
+        },
         { status: 403 }
       );
     }
