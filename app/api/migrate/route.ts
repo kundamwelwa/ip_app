@@ -7,6 +7,8 @@ import path from 'path';
 // This is a temporary endpoint for initial database setup
 
 export async function GET() {
+  let migrationsApplied: string[] = [];
+  
   try {
     // Check if this is being run in production
     if (process.env.NODE_ENV !== 'production') {
@@ -19,7 +21,6 @@ export async function GET() {
     console.log('Starting database migration...');
     
     const prisma = new PrismaClient();
-    let migrationsApplied: string[] = [];
     
     try {
       await prisma.$connect();
