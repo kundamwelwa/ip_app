@@ -71,8 +71,21 @@ export async function GET() {
         const sql = fs.readFileSync(migrationFile, 'utf-8');
         console.log(`Applying migration: ${folder}`);
         
-        // Execute the migration SQL
-        await prisma.$executeRawUnsafe(sql);
+        // Split SQL into individual statements and execute them
+        // Remove comments and split by semicolons
+        const statements = sql
+          .split('\n')
+          .filter(line => !line.trim().startsWith('--'))
+          .join('\n')
+          .split(';')
+          .map(stmt => stmt.trim())
+          .filter(stmt => stmt.length > 0);
+        
+        for (const statement of statements) {
+          if (statement) {
+            await prisma.$executeRawUnsafe(statement);
+          }
+        }
         
         // Record the migration
         const migrationId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
