@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
+import path from 'path';
 
 // IMPORTANT: Delete this file after running migrations!
 // This is a temporary endpoint for initial database setup
@@ -19,20 +18,79 @@ export async function GET() {
 
     console.log('Starting database migration...');
     
-    // Run Prisma migrations
-    const { stdout, stderr } = await execAsync('npx prisma migrate deploy');
+    const prisma = new PrismaClient();
+    let migrationsApplied: string[] = [];
     
-    console.log('Migration output:', stdout);
-    if (stderr) {
-      console.error('Migration stderr:', stderr);
-    }
+    try {
+      await prisma.$connect();
+      console.log('Database connected successfully');
+      
+      // Create migrations table if it doesn't exist
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
+          "id" VARCHAR(36) PRIMARY KEY,
+          "checksum" VARCHAR(64) NOT NULL,
+          "finished_at" TIMESTAMPTZ,
+          "migration_name" VARCHAR(255) NOT NULL,
+          "logs" TEXT,
+          "rolled_back_at" TIMESTAMPTZ,
+          "started_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "applied_steps_count" INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+      
+      // Get list of already applied migrations
+      const appliedMigrations = await prisma.$queryRaw<Array<{ migration_name: string }>>`
+        SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;
+      `;
+      
+      const appliedNames = new Set(appliedMigrations.map(m => m.migration_name));
+      
+      // Read migration files from the migrations directory
+      const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations');
+      const migrationFolders = fs.readdirSync(migrationsDir)
+        .filter(name => !name.startsWith('.'))
+        .sort();
+      
+      for (const folder of migrationFolders) {
+        if (appliedNames.has(folder)) {
+          console.log(`Skipping already applied migration: ${folder}`);
+          continue;
+        }
+        
+        const migrationFile = path.join(migrationsDir, folder, 'migration.sql');
+        if (!fs.existsSync(migrationFile)) {
+          console.log(`No migration.sql found in ${folder}, skipping`);
+          continue;
+        }
+        
+        const sql = fs.readFileSync(migrationFile, 'utf-8');
+        console.log(`Applying migration: ${folder}`);
+        
+        // Execute the migration SQL
+        await prisma.$executeRawUnsafe(sql);
+        
+        // Record the migration
+        const migrationId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO "_prisma_migrations" (id, checksum, migration_name, logs, started_at, finished_at, applied_steps_count)
+          VALUES ($1, $2, $3, $4, now(), now(), 1);
+        `, migrationId, '', folder, `Applied via API at ${new Date().toISOString()}`);
+        
+        migrationsApplied.push(folder);
+        console.log(`Successfully applied: ${folder}`);
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Database migrations completed successfully',
+        migrationsApplied,
+        totalApplied: migrationsApplied.length
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Database migrations completed successfully',
-      output: stdout,
-      stderr: stderr || 'No errors'
-    });
+    } finally {
+      await prisma.$disconnect();
+    }
 
   } catch (error: any) {
     console.error('Migration failed:', error);
@@ -40,8 +98,8 @@ export async function GET() {
       {
         success: false,
         error: error.message,
-        output: error.stdout || '',
-        stderr: error.stderr || ''
+        stack: error.stack,
+        migrationsApplied
       },
       { status: 500 }
     );
