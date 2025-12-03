@@ -28,9 +28,9 @@ export const metadata: Metadata = {
   title: "Rajant Mesh Network - IP Management System",
   description: "Professional IP address management system for Rajant mesh networking equipment in mining operations",
   icons: {
-    icon: "/Ip-logo.png",
-    shortcut: "/Ip-logo.png",
-    apple: "/Ip-logo.png",
+    icon: "/ip-logo.png",
+    shortcut: "/ip-logo.png",
+    apple: "/ip-logo.png",
   },
 };
 
