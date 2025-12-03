@@ -234,7 +234,7 @@ export default function LoginPage() {
           <AnimatedGridBackground
             imageSrc="/authimage.jpg"
             systemName="Rajant Mesh Network"
-            subtitle="First Quantum Minerals • Zambia Operations"
+            subtitle="IP Address • Management System"
           />
         </div>
         <div className="w-full lg:w-1/2 lg:ml-auto flex items-center justify-center p-8 min-h-screen">
