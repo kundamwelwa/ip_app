@@ -8,7 +8,11 @@ import bcrypt from "bcryptjs";
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    
+    console.log("Fetching users, session:", session?.user?.email);
+    
     if (!session?.user?.id || session.user.role !== "ADMIN") {
+      console.log("Unauthorized access attempt");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -23,6 +27,8 @@ export async function GET(request: NextRequest) {
     if (isActive !== null && isActive !== "all") {
       where.isActive = isActive === "true";
     }
+
+    console.log("Querying users with filters:", where);
 
     const users = await prisma.user.findMany({
       where,
@@ -47,6 +53,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
+    console.log(`Found ${users.length} users`);
+
     const formattedUsers = users.map((user) => ({
       ...user,
       createdAt: user.createdAt.toISOString(),
@@ -54,9 +62,20 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({ users: formattedUsers });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching users:", error);
-    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+    console.error("Error details:", {
+      message: error.message,
+      code: error.code,
+      meta: error.meta
+    });
+    return NextResponse.json(
+      { 
+        error: "Failed to fetch users",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }, 
+      { status: 500 }
+    );
   }
 }
 
@@ -133,20 +152,24 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "CREATED_USER",
-        entityType: "user",
-        entityId: user.id,
-        details: {
-          email: user.email,
-          role: user.role,
-          createdBy: session.user.email,
+    // Create audit log (non-blocking)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "CREATED_USER",
+          entityType: "user",
+          entityId: user.id,
+          details: {
+            email: user.email,
+            role: user.role,
+            createdBy: session.user.email,
+          },
         },
-      },
-    });
+      });
+    } catch (auditError) {
+      console.error("Failed to create audit log:", auditError);
+    }
 
     return NextResponse.json({
       user: {
