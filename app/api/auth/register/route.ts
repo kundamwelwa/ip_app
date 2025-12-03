@@ -5,8 +5,19 @@ import { RegisterFormData } from "@/types/auth"
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse and validate request body
     const body: RegisterFormData = await request.json()
     const { firstName, lastName, email, password, department, role } = body
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !password || !department || !role) {
+      return NextResponse.json(
+        { error: "All fields are required" },
+        { status: 400 }
+      )
+    }
+
+    console.log("Registration attempt for:", email)
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -44,20 +55,25 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        action: "USER_REGISTERED",
-        entityType: "USER",
-        entityId: user.id,
-        userId: user.id,
-        details: {
-          email: user.email,
-          role: user.role,
-          department: user.department,
+    // Create audit log (non-blocking - don't fail registration if this fails)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: "USER_REGISTERED",
+          entityType: "USER",
+          entityId: user.id,
+          userId: user.id,
+          details: {
+            email: user.email,
+            role: user.role,
+            department: user.department,
+          }
         }
-      }
-    })
+      })
+    } catch (auditError) {
+      // Log the error but don't fail the registration
+      console.error("Failed to create audit log:", auditError)
+    }
 
     return NextResponse.json(
       { 
