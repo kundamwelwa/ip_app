@@ -65,7 +65,7 @@ function LoginForm() {
         <AnimatedGridBackground
           imageSrc="/authimage.jpg"
           systemName="Rajant Mesh Network"
-          subtitle="First Quantum Minerals • Zambia Operations"
+          subtitle="IP Address • Management System"
         />
       </div>
 
@@ -215,7 +215,7 @@ function LoginForm() {
               >
                 <p className="text-xs text-amber-100/30 flex items-center justify-center gap-2">
                   <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                  Secured Network Infrastructure
+                  Manage your IP addresses effectively
                 </p>
               </motion.div>
             </CardContent>
