@@ -27,6 +27,12 @@ const orbitron = Orbitron({
 export const metadata: Metadata = {
   title: "Rajant Mesh Network - IP Management System",
   description: "Professional IP address management system for Rajant mesh networking equipment in mining operations",
+  icons: {
+    icon: [
+      { url: "/ip-logo.png", type: "image/png" },
+    ],
+    apple: "/ip-logo.png",
+  },
 };
 
 export default function RootLayout({
