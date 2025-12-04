@@ -28,13 +28,7 @@ export async function GET(
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        _count: {
-          select: {
-            ipAssignments: true,
-            auditLogs: true,
-            reports: true,
-          },
-        },
+        // Removed _count temporarily until all tables exist
       },
     });
 
@@ -105,20 +99,24 @@ export async function PATCH(
       },
     });
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "UPDATED_USER",
-        entityType: "user",
-        entityId: user.id,
-        details: {
-          email: user.email,
-          updatedFields: Object.keys(updateData),
-          updatedBy: session.user.email,
+    // Create audit log (non-blocking)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "UPDATED_USER",
+          entityType: "user",
+          entityId: user.id,
+          details: {
+            email: user.email,
+            updatedFields: Object.keys(updateData),
+            updatedBy: session.user.email,
+          },
         },
-      },
-    });
+      });
+    } catch (auditError) {
+      console.error("Failed to create audit log:", auditError);
+    }
 
     return NextResponse.json({
       user: {
@@ -159,13 +157,7 @@ export async function DELETE(
       select: { 
         email: true, 
         role: true,
-        _count: {
-          select: {
-            ipAssignments: true,
-            reports: true,
-            auditLogs: true,
-          }
-        }
+        // Removed _count temporarily until all tables exist
       },
     });
 
@@ -173,60 +165,75 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Create audit log before deletion
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: "DELETED_USER",
-        entityType: "user",
-        entityId: id,
-        details: {
-          email: user.email,
-          role: user.role,
-          deletedBy: session.user.email,
-          relatedRecords: {
-            ipAssignments: user._count.ipAssignments,
-            reports: user._count.reports,
-            auditLogs: user._count.auditLogs,
-          }
+    // Create audit log before deletion (non-blocking)
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: session.user.id,
+          action: "DELETED_USER",
+          entityType: "user",
+          entityId: id,
+          details: {
+            email: user.email,
+            role: user.role,
+            deletedBy: session.user.email,
+          },
         },
-      },
-    });
+      });
+    } catch (auditError) {
+      console.error("Failed to create audit log:", auditError);
+    }
 
     // Use a transaction to handle related records safely
     await prisma.$transaction(async (tx) => {
       // Nullify alert relationships (don't delete alerts, just remove user references)
-      await tx.alert.updateMany({
-        where: { acknowledgedBy: id },
-        data: { acknowledgedBy: null },
-      });
-      await tx.alert.updateMany({
-        where: { approvedBy: id },
-        data: { approvedBy: null },
-      });
-      await tx.alert.updateMany({
-        where: { rejectedBy: id },
-        data: { rejectedBy: null },
-      });
-      await tx.alert.updateMany({
-        where: { resolvedBy: id },
-        data: { resolvedBy: null },
-      });
+      try {
+        await tx.alert.updateMany({
+          where: { acknowledgedBy: id },
+          data: { acknowledgedBy: null },
+        });
+        await tx.alert.updateMany({
+          where: { approvedBy: id },
+          data: { approvedBy: null },
+        });
+        await tx.alert.updateMany({
+          where: { rejectedBy: id },
+          data: { rejectedBy: null },
+        });
+        await tx.alert.updateMany({
+          where: { resolvedBy: id },
+          data: { resolvedBy: null },
+        });
+      } catch (e) {
+        console.log("Alert updates skipped (table might not exist)");
+      }
 
       // Delete IP assignments (they belong to the user)
-      await tx.iPAssignment.deleteMany({
-        where: { userId: id },
-      });
+      try {
+        await tx.iPAssignment.deleteMany({
+          where: { userId: id },
+        });
+      } catch (e) {
+        console.log("IP assignments deletion skipped (table might not exist)");
+      }
 
-      // Delete reports (they belong to the user)
-      await tx.report.deleteMany({
-        where: { userId: id },
-      });
+      // Delete reports (they belong to the user) - skip if table doesn't exist
+      try {
+        await tx.report.deleteMany({
+          where: { userId: id },
+        });
+      } catch (e) {
+        console.log("Reports deletion skipped (table doesn't exist yet)");
+      }
 
       // Delete audit logs created by this user
-      await tx.auditLog.deleteMany({
-        where: { userId: id },
-      });
+      try {
+        await tx.auditLog.deleteMany({
+          where: { userId: id },
+        });
+      } catch (e) {
+        console.log("Audit logs deletion skipped (table might not exist)");
+      }
 
       // Finally, delete the user
       await tx.user.delete({
