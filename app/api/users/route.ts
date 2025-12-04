@@ -42,13 +42,14 @@ export async function GET(request: NextRequest) {
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        _count: {
-          select: {
-            ipAssignments: true,
-            auditLogs: true,
-            reports: true,
-          },
-        },
+        // Temporarily removed counts until all tables are created
+        // _count: {
+        //   select: {
+        //     ipAssignments: true,
+        //     auditLogs: true,
+        //     reports: true,
+        //   },
+        // },
       },
       orderBy: { createdAt: "desc" },
     });
