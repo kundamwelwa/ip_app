@@ -184,61 +184,10 @@ export async function DELETE(
       console.error("Failed to create audit log:", auditError);
     }
 
-    // Use a transaction to handle related records safely
-    await prisma.$transaction(async (tx) => {
-      // Nullify alert relationships (don't delete alerts, just remove user references)
-      try {
-        await tx.alert.updateMany({
-          where: { acknowledgedBy: id },
-          data: { acknowledgedBy: null },
-        });
-        await tx.alert.updateMany({
-          where: { approvedBy: id },
-          data: { approvedBy: null },
-        });
-        await tx.alert.updateMany({
-          where: { rejectedBy: id },
-          data: { rejectedBy: null },
-        });
-        await tx.alert.updateMany({
-          where: { resolvedBy: id },
-          data: { resolvedBy: null },
-        });
-      } catch (e) {
-        console.log("Alert updates skipped (table might not exist)");
-      }
-
-      // Delete IP assignments (they belong to the user)
-      try {
-        await tx.iPAssignment.deleteMany({
-          where: { userId: id },
-        });
-      } catch (e) {
-        console.log("IP assignments deletion skipped (table might not exist)");
-      }
-
-      // Delete reports (they belong to the user) - skip if table doesn't exist
-      try {
-        await tx.report.deleteMany({
-          where: { userId: id },
-        });
-      } catch (e) {
-        console.log("Reports deletion skipped (table doesn't exist yet)");
-      }
-
-      // Delete audit logs created by this user
-      try {
-        await tx.auditLog.deleteMany({
-          where: { userId: id },
-        });
-      } catch (e) {
-        console.log("Audit logs deletion skipped (table might not exist)");
-      }
-
-      // Finally, delete the user
-      await tx.user.delete({
-        where: { id },
-      });
+    // Delete the user - cascade will handle related records based on schema
+    // For now, we'll do a simple delete until all tables are created
+    await prisma.user.delete({
+      where: { id },
     });
 
     return NextResponse.json({ message: "User deleted successfully" });
