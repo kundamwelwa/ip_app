@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -12,7 +12,7 @@ import { AnimatedGridBackground } from "@/components/ui/animated-grid-background
 import { Lock, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { PasswordInput } from "@/components/ui/password-input";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
@@ -253,3 +253,14 @@ export default function ResetPasswordPage() {
   );
 }
 
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-zinc-900 to-slate-900">
+        <div className="text-amber-200">Loading...</div>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
