@@ -809,7 +809,7 @@ export function MiningDashboard() {
               <CardDescription>Detailed view of all mining equipment and their network status</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
                 <Table>
                 <TableHeader>
                   <TableRow>

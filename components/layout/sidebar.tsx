@@ -275,9 +275,17 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
               return null;
             }
 
+            // Check if this is the first rendered section by checking previous sections
+            const isFirstRenderedSection = navigation.slice(0, sectionIndex).every((prevSection) => {
+              const prevEnabledItems = prevSection.items.filter((item) =>
+                isSidebarFeatureEnabled(item.featureFlag as keyof typeof sidebarFeatures)
+              );
+              return prevEnabledItems.length === 0;
+            });
+
             return (
               <div key={section.title} className={cn(
-                sectionIndex > 0 && !isCollapsed && "mt-6"
+                !isFirstRenderedSection && !isCollapsed && "mt-6"
               )}>
                 {!isCollapsed && (
                   <div className="px-3 py-2 mb-2">
