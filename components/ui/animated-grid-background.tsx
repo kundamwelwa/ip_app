@@ -102,33 +102,113 @@ export function AnimatedGridBackground({ imageSrc, systemName, subtitle }: Anima
       </div>
 
 
-      {/* Central Content - Liquid Glass Morphism */}
+      {/* Central Content - Premium Liquid Glass Morphism */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
           className="relative"
+          style={{
+            transform: `perspective(1000px) rotateX(${mousePosition.y * 0.05}deg) rotateY(${mousePosition.x * 0.05}deg)`,
+          }}
         >
-          {/* Glass morphism glow effect */}
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-400/20 via-yellow-500/20 to-amber-400/20 rounded-3xl blur-2xl opacity-60 animate-pulse" />
+          {/* Outer glow layers - multiple for depth */}
+          <motion.div
+            className="absolute -inset-1 bg-gradient-to-r from-amber-400/30 via-yellow-500/30 to-amber-400/30 rounded-[2rem] blur-3xl opacity-70"
+            animate={{
+              opacity: [0.5, 0.8, 0.5],
+              scale: [1, 1.05, 1],
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+          <motion.div
+            className="absolute -inset-2 bg-gradient-to-r from-yellow-500/20 via-amber-500/20 to-yellow-500/20 rounded-[2.5rem] blur-[60px] opacity-50"
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
           
-          {/* Liquid glass card */}
-          <div className="relative bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-2xl rounded-3xl p-10 border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] overflow-hidden">
-            {/* Glass reflection effect */}
-            <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+          {/* Main glass container */}
+          <div className="relative bg-gradient-to-br from-white/[0.15] via-white/[0.08] to-white/[0.03] backdrop-blur-[40px] rounded-[2rem] p-12 border border-white/30 shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.2)] overflow-hidden">
+            {/* Animated light sweep */}
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+              animate={{
+                x: ["-200%", "200%"],
+              }}
+              transition={{
+                duration: 6,
+                repeat: Infinity,
+                ease: "linear",
+              }}
+              style={{
+                transform: "skewX(-20deg)",
+              }}
+            />
             
-            {/* Inner glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-yellow-500/5 rounded-3xl pointer-events-none" />
+            {/* Top highlight - glass reflection */}
+            <div className="absolute top-0 left-0 right-0 h-[40%] bg-gradient-to-b from-white/30 via-white/10 to-transparent rounded-t-[2rem] pointer-events-none" />
             
-            {/* Content */}
+            {/* Side highlights for 3D effect */}
+            <div className="absolute top-0 left-0 w-[30%] h-full bg-gradient-to-r from-white/15 to-transparent rounded-l-[2rem] pointer-events-none" />
+            <div className="absolute top-0 right-0 w-[30%] h-full bg-gradient-to-l from-white/10 to-transparent rounded-r-[2rem] pointer-events-none" />
+            
+            {/* Bottom shadow gradient */}
+            <div className="absolute bottom-0 left-0 right-0 h-[30%] bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-b-[2rem] pointer-events-none" />
+            
+            {/* Inner color glow layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-yellow-500/10 rounded-[2rem] pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-amber-400/5 to-yellow-400/5 rounded-[2rem] pointer-events-none" />
+            
+            {/* Animated shimmer particles */}
+            <motion.div
+              className="absolute top-1/4 left-1/4 w-2 h-2 bg-white/40 rounded-full blur-sm"
+              animate={{
+                opacity: [0, 1, 0],
+                scale: [0.5, 1.5, 0.5],
+                x: [0, 100, 0],
+                y: [0, 50, 0],
+              }}
+              transition={{
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+            <motion.div
+              className="absolute top-1/3 right-1/4 w-1.5 h-1.5 bg-amber-300/50 rounded-full blur-sm"
+              animate={{
+                opacity: [0, 1, 0],
+                scale: [0.5, 2, 0.5],
+                x: [0, -80, 0],
+                y: [0, 60, 0],
+              }}
+              transition={{
+                duration: 5,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: 1,
+              }}
+            />
+            
+            {/* Content with enhanced styling */}
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
               className="relative z-10"
             >
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent mb-4 tracking-tight drop-shadow-lg">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent mb-4 tracking-tight drop-shadow-[0_4px_12px_rgba(251,191,36,0.5)]">
                 {systemName}
               </h1>
               {subtitle && (
@@ -136,7 +216,7 @@ export function AnimatedGridBackground({ imageSrc, systemName, subtitle }: Anima
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5, delay: 0.4 }}
-                  className="text-lg md:text-xl text-amber-100/90 font-medium tracking-wide drop-shadow-md"
+                  className="text-lg md:text-xl text-amber-100/95 font-medium tracking-wide drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
                 >
                   {subtitle}
                 </motion.p>
