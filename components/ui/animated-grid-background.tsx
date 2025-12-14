@@ -101,64 +101,8 @@ export function AnimatedGridBackground({ imageSrc, systemName, subtitle }: Anima
         />
       </div>
 
-      {/* Mining Industry Themed Stats/Info Cards */}
-      <div className="absolute inset-0 pointer-events-none">
-        {/* Top Left - System Info */}
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 1, delay: 0.5 }}
-          className="absolute top-8 left-8"
-        >
-          <div className="bg-gradient-to-br from-amber-500/10 to-yellow-600/5 backdrop-blur-md border border-amber-500/20 rounded-lg p-4 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-500/50" />
-              <div>
-                <p className="text-xs text-amber-200/60 font-medium">SYSTEM STATUS</p>
-                <p className="text-sm text-white font-bold">OPERATIONAL</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
 
-        {/* Bottom Right - Location Info */}
-        <motion.div
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 1, delay: 0.7 }}
-          className="absolute bottom-8 right-8"
-        >
-          <div className="bg-gradient-to-br from-slate-800/30 to-zinc-900/30 backdrop-blur-md border border-amber-500/20 rounded-lg p-4 shadow-xl">
-            <div className="flex items-center gap-3">
-              <svg
-                className="w-5 h-5 text-amber-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              <div>
-                <p className="text-xs text-amber-200/60 font-medium">LOCATION</p>
-                <p className="text-sm text-white font-bold">Zambia</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Central Content */}
+      {/* Central Content - Liquid Glass Morphism */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -166,14 +110,25 @@ export function AnimatedGridBackground({ imageSrc, systemName, subtitle }: Anima
           transition={{ duration: 0.8 }}
           className="relative"
         >
-          <div className="absolute -inset-1 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-600 rounded-2xl blur-xl opacity-20 animate-pulse" />
-          <div className="relative bg-gradient-to-br from-slate-900/90 via-zinc-900/90 to-slate-900/90 backdrop-blur-xl rounded-2xl p-10 border border-amber-500/20 shadow-2xl">
+          {/* Glass morphism glow effect */}
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-400/20 via-yellow-500/20 to-amber-400/20 rounded-3xl blur-2xl opacity-60 animate-pulse" />
+          
+          {/* Liquid glass card */}
+          <div className="relative bg-gradient-to-br from-white/10 via-white/5 to-transparent backdrop-blur-2xl rounded-3xl p-10 border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] overflow-hidden">
+            {/* Glass reflection effect */}
+            <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
+            
+            {/* Inner glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-yellow-500/5 rounded-3xl pointer-events-none" />
+            
+            {/* Content */}
             <motion.div
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
+              className="relative z-10"
             >
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent mb-4 tracking-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent mb-4 tracking-tight drop-shadow-lg">
                 {systemName}
               </h1>
               {subtitle && (
@@ -181,22 +136,11 @@ export function AnimatedGridBackground({ imageSrc, systemName, subtitle }: Anima
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.5, delay: 0.4 }}
-                  className="text-lg md:text-xl text-amber-100/80 font-medium tracking-wide"
+                  className="text-lg md:text-xl text-amber-100/90 font-medium tracking-wide drop-shadow-md"
                 >
                   {subtitle}
                 </motion.p>
               )}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.6 }}
-                className="mt-6 flex items-center justify-center gap-2 text-sm text-amber-200/60"
-              >
-                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                <span>First Quantum Minerals</span>
-                <div className="w-1 h-1 bg-amber-500/40 rounded-full" />
-                <span>Zambia Operations</span>
-              </motion.div>
             </motion.div>
           </div>
         </motion.div>
