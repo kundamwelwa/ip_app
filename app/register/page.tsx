@@ -177,7 +177,6 @@ export default function RegisterPage() {
                       id="firstName"
                       name="firstName"
                       type="text"
-                      placeholder="Kelly"
                       value={formData.firstName}
                       onChange={handleInputChange}
                       required
@@ -192,7 +191,6 @@ export default function RegisterPage() {
                       id="lastName"
                       name="lastName"
                       type="text"
-                      placeholder="Mwelwa"
                       value={formData.lastName}
                       onChange={handleInputChange}
                       required
@@ -215,7 +213,6 @@ export default function RegisterPage() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="kelly@firstquantum.com"
                     value={formData.email}
                     onChange={handleInputChange}
                     required
@@ -237,7 +234,6 @@ export default function RegisterPage() {
                     id="department"
                     name="department"
                     type="text"
-                    placeholder="IT Department"
                     value={formData.department}
                     onChange={handleInputChange}
                     required
@@ -257,7 +253,7 @@ export default function RegisterPage() {
                   </Label>
                   <Select value={formData.role} onValueChange={handleRoleChange}>
                     <SelectTrigger className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white h-11">
-                      <SelectValue placeholder="Select your role" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-amber-500/30">
                       <SelectItem value="ADMIN" className="text-white hover:bg-amber-500/10">
@@ -295,7 +291,6 @@ export default function RegisterPage() {
                   <PasswordInput
                     id="password"
                     name="password"
-                    placeholder="Create a strong password"
                     value={formData.password}
                     onChange={handleInputChange}
                     showStrength={true}
@@ -318,7 +313,6 @@ export default function RegisterPage() {
                   <PasswordInput
                     id="confirmPassword"
                     name="confirmPassword"
-                    placeholder="Confirm your password"
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
                     required

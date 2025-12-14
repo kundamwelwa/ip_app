@@ -99,7 +99,6 @@ export async function PATCH(
       },
     });
 
-    // Create audit log (non-blocking)
     try {
       await prisma.auditLog.create({
         data: {
@@ -131,7 +130,6 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/users/[id] - Delete a user (Admin only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -144,7 +142,6 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Prevent user from deleting their own account
     if (id === session.user.id) {
       return NextResponse.json(
         { error: "Cannot delete your own account" },
@@ -157,7 +154,6 @@ export async function DELETE(
       select: { 
         email: true, 
         role: true,
-        // Removed _count temporarily until all tables exist
       },
     });
 
@@ -184,8 +180,6 @@ export async function DELETE(
       console.error("Failed to create audit log:", auditError);
     }
 
-    // Delete the user - cascade will handle related records based on schema
-    // For now, we'll do a simple delete until all tables are created
     await prisma.user.delete({
       where: { id },
     });

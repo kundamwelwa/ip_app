@@ -134,11 +134,10 @@ function LoginForm() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="kelly@firstquantum.com"
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white placeholder:text-slate-400 h-11"
+                    className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white h-11"
                   />
                 </motion.div>
                 
@@ -155,12 +154,19 @@ function LoginForm() {
                   <PasswordInput
                     id="password"
                     name="password"
-                    placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleInputChange}
                     required
                     className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white placeholder:text-slate-400 h-11"
                   />
+                  <div className="flex justify-end mt-1">
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
                 </motion.div>
                 
                 <motion.div
