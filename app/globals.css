@@ -519,7 +519,7 @@
 
   /* Large Numbers - Always High Contrast */
   .card-number-large {
-    @apply text-gray-900 font-bold text-4xl;
+    @apply text-gray-900 font-bold text-2xl sm:text-3xl lg:text-4xl;
   }
   
   .dark .card-number-large {

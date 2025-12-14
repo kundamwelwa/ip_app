@@ -406,14 +406,14 @@ export function MiningDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-6xl font-orbitron font-bold tracking-wide bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-slate-100 dark:via-slate-50 dark:to-slate-100 bg-clip-text text-transparent mb-3 drop-shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-orbitron font-bold tracking-wide bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-slate-100 dark:via-slate-50 dark:to-slate-100 bg-clip-text text-transparent mb-2 sm:mb-3 drop-shadow-sm break-words">
             Hello, {getFirstName() || "User"}
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Track which IP addresses are linked to equipment. Type an IP address in the{" "}
             <button
               onClick={scrollToIPChecker}
@@ -425,21 +425,24 @@ export function MiningDashboard() {
           </p>
         </div>
         {isDashboardFeatureEnabled("showMonitoringControls") && (
-          <div className="flex items-center space-x-2">
-            <Badge className="quantum-status-online quantum-pulse">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 flex-shrink-0">
+            <Badge className="quantum-status-online quantum-pulse w-fit">
               <Activity className="mr-1 h-3 w-3" />
-              Live Monitoring
+              <span className="hidden sm:inline">Live Monitoring</span>
+              <span className="sm:hidden">Live</span>
             </Badge>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               {isDashboardFeatureEnabled("showRealTimeCheckButton") && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => fetchDashboardData(true)}
                   disabled={loading}
+                  className="text-xs sm:text-sm"
                 >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  Real-time Check
+                  <RefreshCw className={`mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Real-time Check</span>
+                  <span className="sm:hidden">Check</span>
                 </Button>
               )}
               <Button
@@ -447,21 +450,25 @@ export function MiningDashboard() {
                 size="sm"
                 onClick={monitoringStatus.isRunning ? stopMonitoring : () => startMonitoring()}
                 disabled={isMonitoringLoading}
+                className="text-xs sm:text-sm"
               >
                 {monitoringStatus.isRunning ? (
                   <>
-                    <Pause className="mr-2 h-4 w-4" />
-                    Stop Monitor
+                    <Pause className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Stop Monitor</span>
+                    <span className="sm:hidden">Stop</span>
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Start Monitor
+                    <Play className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Start Monitor</span>
+                    <span className="sm:hidden">Start</span>
                   </>
                 )}
               </Button>
-              <Badge variant={monitoringStatus.isRunning ? "default" : "secondary"}>
-                {monitoringStatus.isRunning ? "Monitoring Active" : "Monitoring Inactive"}
+              <Badge variant={monitoringStatus.isRunning ? "default" : "secondary"} className="text-xs">
+                <span className="hidden sm:inline">{monitoringStatus.isRunning ? "Monitoring Active" : "Monitoring Inactive"}</span>
+                <span className="sm:hidden">{monitoringStatus.isRunning ? "Active" : "Inactive"}</span>
               </Badge>
             </div>
           </div>
@@ -655,24 +662,26 @@ export function MiningDashboard() {
 
       {/* Main Content Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList>
-          {isDashboardFeatureEnabled("showOverviewTab") && (
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-          )}
-          {isDashboardFeatureEnabled("showEquipmentSection") && (
-            <TabsTrigger value="equipment">Equipment</TabsTrigger>
-          )}
-          {isDashboardFeatureEnabled("showNetworkTab") && (
-            <TabsTrigger value="network">Network</TabsTrigger>
-          )}
-          {isDashboardFeatureEnabled("showAlertsSection") && (
-            <TabsTrigger value="alerts">Alerts</TabsTrigger>
-          )}
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-full sm:w-auto inline-flex min-w-full sm:min-w-0">
+            {isDashboardFeatureEnabled("showOverviewTab") && (
+              <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            )}
+            {isDashboardFeatureEnabled("showEquipmentSection") && (
+              <TabsTrigger value="equipment" className="text-xs sm:text-sm">Equipment</TabsTrigger>
+            )}
+            {isDashboardFeatureEnabled("showNetworkTab") && (
+              <TabsTrigger value="network" className="text-xs sm:text-sm">Network</TabsTrigger>
+            )}
+            {isDashboardFeatureEnabled("showAlertsSection") && (
+              <TabsTrigger value="alerts" className="text-xs sm:text-sm">Alerts</TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         {isDashboardFeatureEnabled("showOverviewTab") && (
           <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
             {/* Equipment Status Overview */}
             <Card>
               <CardHeader>
@@ -800,7 +809,8 @@ export function MiningDashboard() {
               <CardDescription>Detailed view of all mining equipment and their network status</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Equipment</TableHead>
@@ -878,6 +888,7 @@ export function MiningDashboard() {
                   })}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -31,7 +31,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -277,10 +276,12 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             }
 
             return (
-              <div key={section.title}>
+              <div key={section.title} className={cn(
+                sectionIndex > 0 && !isCollapsed && "mt-6"
+              )}>
                 {!isCollapsed && (
-                  <div className="px-3 py-2">
-                    <h3 className="mb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="px-3 py-2 mb-2">
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
                       {section.title}
                     </h3>
                   </div>
@@ -332,9 +333,6 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                     return buttonContent;
                   })}
                 </div>
-                {sectionIndex < navigation.length - 1 && !isCollapsed && (
-                  <Separator className="my-4" />
-                )}
               </div>
             );
           })}

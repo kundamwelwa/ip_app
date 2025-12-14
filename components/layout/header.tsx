@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Badge } from "@/components/ui/badge";
-import { SystemSearch } from "@/components/ui/system-search";
 
 export function Header() {
   const { data: session } = useSession();
@@ -46,30 +45,25 @@ export function Header() {
 
   return (
     <header className="w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center justify-between px-6 gap-6">
-        {/* System Search */}
-        <div className="flex-1 max-w-3xl">
-          <SystemSearch />
-        </div>
-
+      <div className="flex h-16 items-center justify-end px-4 sm:px-6 gap-4">
         {/* Right side - User info and controls */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           {/* Theme Toggle */}
           <ThemeToggle />
 
           {/* User Profile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-12 w-auto px-3">
-                <div className="flex items-center space-x-3">
-                  <Avatar className="h-10 w-10">
+              <Button variant="ghost" className="relative h-10 sm:h-12 w-auto px-2 sm:px-3">
+                <div className="flex items-center space-x-2 sm:space-x-3">
+                  <Avatar className="h-8 w-8 sm:h-10 sm:w-10">
                     <AvatarImage src="" alt={session.user?.name || ""} />
                     <AvatarFallback className="text-xs">
                       {getInitials(session.user?.name || "U")}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start">
-                    <span className="text-sm font-medium">
+                  <div className="hidden sm:flex flex-col items-start">
+                    <span className="text-xs sm:text-sm font-medium truncate max-w-[120px]">
                       {session.user?.name}
                     </span>
                     <Badge
