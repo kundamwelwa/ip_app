@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import {
   Truck,
   Wrench,
@@ -113,6 +114,14 @@ interface DashboardData {
 }
 
 export function MiningDashboard() {
+  const { data: session } = useSession();
+  
+  // Get user's first name from session
+  const getFirstName = () => {
+    if (!session?.user?.name) return "";
+    return session.user.name.split(" ")[0];
+  };
+  
   // Set default tab based on enabled features
   const getDefaultTab = () => {
     if (isDashboardFeatureEnabled("showEquipmentSection")) return "equipment";
@@ -401,8 +410,8 @@ export function MiningDashboard() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-600 dark:from-blue-400 dark:via-blue-300 dark:to-cyan-400 bg-clip-text text-transparent">
-            Welcome to the main Dashboard
+          <h1 className="text-6xl font-orbitron font-bold tracking-wide bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-slate-100 dark:via-slate-50 dark:to-slate-100 bg-clip-text text-transparent mb-3 drop-shadow-sm">
+            Hello, {getFirstName() || "User"}
           </h1>
           <p className="text-muted-foreground">
             Track which IP addresses are linked to equipment. Type an IP address in the{" "}
