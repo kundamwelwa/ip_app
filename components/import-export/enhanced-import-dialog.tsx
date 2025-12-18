@@ -287,16 +287,45 @@ export function EnhancedImportDialog({
         progress: 60,
       });
 
-      // Send to API
-      const response = await fetch('/api/equipment/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ equipment: equipmentToImport }),
-      });
+      // Send to API with improved error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minute timeout for large imports
 
-      const data = await response.json();
+      let response;
+      try {
+        response = await fetch('/api/equipment/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ equipment: equipmentToImport }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('Import request timed out. The import may still be processing. Please check the equipment list or try importing in smaller batches.');
+        }
+        throw fetchError;
+      }
+
+      // Handle different response statuses
+      if (response.status === 504) {
+        throw new Error('Gateway timeout: The import is taking too long. The server may still be processing your request. Please check the equipment list or try importing in smaller batches.');
+      }
+
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+
+      let data;
+      if (isJson) {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } else {
+        const text = await response.text();
+        throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to import equipment');

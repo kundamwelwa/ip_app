@@ -29,9 +29,22 @@ export async function POST(request: NextRequest) {
       errors: [] as string[],
     };
 
-    for (const item of equipment) {
-      try {
-        // Validate required fields
+    // Process in batches to avoid timeout and improve performance
+    const BATCH_SIZE = 50;
+    const batches = [];
+    for (let i = 0; i < equipment.length; i += BATCH_SIZE) {
+      batches.push(equipment.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      
+      // Use transaction for each batch to improve performance
+      await prisma.$transaction(async (tx) => {
+        for (const item of batch) {
+          try {
+            // Validate required fields
         if (!item.name || !item.type) {
           results.failed++;
           results.errors.push(`Missing required fields for equipment: ${item.name || "unknown"}`);
@@ -40,7 +53,7 @@ export async function POST(request: NextRequest) {
 
         // Check for duplicate MAC address
         if (item.macAddress) {
-          const existing = await prisma.equipment.findUnique({
+          const existing = await tx.equipment.findUnique({
             where: { macAddress: item.macAddress },
           });
 
@@ -52,7 +65,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create equipment
-        const newEquipment = await prisma.equipment.create({
+        const newEquipment = await tx.equipment.create({
           data: {
             name: item.name,
             type: item.type.toUpperCase(),
@@ -90,7 +103,7 @@ export async function POST(request: NextRequest) {
               }
 
               // Check if IP address already exists
-              const existingIP = await prisma.iPAddress.findUnique({
+              const existingIP = await tx.iPAddress.findUnique({
                 where: { address: ipAddress },
                 include: {
                   assignments: {
@@ -113,7 +126,7 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Update existing IP record
-                await prisma.iPAddress.update({
+                await tx.iPAddress.update({
                   where: { id: existingIP.id },
                   data: {
                     status: 'ASSIGNED',
@@ -126,7 +139,7 @@ export async function POST(request: NextRequest) {
                 ipAddressId = existingIP.id;
               } else {
                 // Create new IP address record
-                const newIP = await prisma.iPAddress.create({
+                const newIP = await tx.iPAddress.create({
                   data: {
                     address: ipAddress,
                     subnet: subnet,
@@ -141,7 +154,7 @@ export async function POST(request: NextRequest) {
               }
 
               // Create IP assignment linking equipment to IP
-              await prisma.iPAssignment.create({
+              await tx.iPAssignment.create({
                 data: {
                   ipAddressId: ipAddressId,
                   equipmentId: newEquipment.id,
@@ -152,7 +165,7 @@ export async function POST(request: NextRequest) {
               });
 
               // Create audit log for IP assignment
-              await prisma.auditLog.create({
+              await tx.auditLog.create({
                 data: {
                   action: "IP_ASSIGNED",
                   entityType: "IP_ADDRESS",
@@ -177,7 +190,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create audit log
-        await prisma.auditLog.create({
+        await tx.auditLog.create({
           data: {
             action: "EQUIPMENT_IMPORTED",
             entityType: "EQUIPMENT",
@@ -193,13 +206,17 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        results.successful++;
-      } catch (error) {
-        results.failed++;
-        results.errors.push(
-          `Failed to import equipment ${item.name}: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
+            results.successful++;
+          } catch (error) {
+            results.failed++;
+            results.errors.push(
+              `Failed to import equipment ${item.name}: ${error instanceof Error ? error.message : "Unknown error"}`
+            );
+          }
+        }
+      }, {
+        timeout: 60000, // 60 second timeout per batch
+      });
     }
 
     return NextResponse.json({

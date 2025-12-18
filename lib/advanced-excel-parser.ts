@@ -245,7 +245,7 @@ export async function parseExcelSheet(
 }
 
 /**
- * Detects column structure from header row
+ * Detects column structure from header row with intelligent pattern matching
  */
 function detectColumnStructure(headerRow: any[]): {
   machineId: number;
@@ -264,37 +264,70 @@ function detectColumnStructure(headerRow: any[]): {
     comments: -1,
   };
 
+  // If header row looks like data (contains IP addresses), try to detect from first few data rows
+  const hasIPInHeader = headerRow.some((cell: any) => {
+    const str = cell?.toString().trim() || '';
+    return isValidIPAddress(str);
+  });
+
+  // If no clear headers, try to infer from data structure
+  if (hasIPInHeader || headerRow.every((cell: any) => !cell || cell.toString().trim() === '')) {
+    // Try common column positions based on typical Excel layouts
+    // Often: Machine ID (col 0), System (col 1), IP (col 2), Subnet (col 3), Gateway (col 4), Comments (col 5)
+    columnMap.machineId = 0;
+    columnMap.system = 1;
+    columnMap.ipAddress = 2;
+    columnMap.subnet = 3;
+    columnMap.gateway = 4;
+    columnMap.comments = 5;
+    return columnMap;
+  }
+
   headerRow.forEach((header, index) => {
     if (!header) return;
     
     const headerStr = header.toString().toLowerCase().trim().replace(/[_\s-]/g, '');
 
-    // Machine ID detection (more flexible)
+    // Machine ID detection (more flexible patterns)
     if (
-      headerStr.includes('machineid') ||
-      headerStr.includes('equipmentid') ||
-      headerStr.includes('machine') && headerStr.includes('id') ||
-      headerStr === 'id' ||
-      headerStr.includes('equipment')
+      columnMap.machineId === -1 && (
+        headerStr.includes('machineid') ||
+        headerStr.includes('equipmentid') ||
+        (headerStr.includes('machine') && headerStr.includes('id')) ||
+        headerStr === 'id' ||
+        headerStr === 'machine' ||
+        headerStr.includes('equipment') ||
+        headerStr.includes('unit') ||
+        headerStr.includes('asset')
+      )
     ) {
       columnMap.machineId = index;
     }
 
-    // System detection (more flexible)
+    // System detection (more flexible patterns)
     if (
-      headerStr.includes('system') ||
-      headerStr.includes('component') ||
-      headerStr.includes('device') ||
-      headerStr.includes('name')
+      columnMap.system === -1 && (
+        headerStr.includes('system') ||
+        headerStr.includes('component') ||
+        headerStr.includes('device') ||
+        headerStr.includes('name') ||
+        headerStr.includes('description') ||
+        headerStr.includes('type')
+      )
     ) {
       columnMap.system = index;
     }
 
-    // IP Address detection (more flexible)
+    // IP Address detection (more flexible patterns - prioritize exact matches)
     if (
-      headerStr.includes('ipaddress') ||
-      headerStr.includes('ip') ||
-      headerStr.includes('address')
+      columnMap.ipAddress === -1 && (
+        headerStr === 'ip' ||
+        headerStr === 'ipaddress' ||
+        headerStr.includes('ipaddress') ||
+        (headerStr.includes('ip') && !headerStr.includes('equipment')) ||
+        headerStr === 'address' ||
+        (headerStr.includes('address') && !headerStr.includes('mac'))
+      )
     ) {
       columnMap.ipAddress = index;
     }
