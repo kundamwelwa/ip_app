@@ -131,7 +131,21 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
         body: JSON.stringify({ equipment: importData }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error("Failed to parse response as JSON:", parseError);
+        setImportResult({
+          success: false,
+          imported: 0,
+          errors: ["An error occurred while processing the import. Please try again."],
+          warnings: []
+        });
+        setIsProcessing(false);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to import equipment');

@@ -71,18 +71,18 @@ export function SessionTimeoutWarning() {
           exit={{ opacity: 0, y: -50 }}
           className="fixed top-4 right-4 z-50 w-full max-w-md"
         >
-          <div className="bg-gradient-to-br from-amber-500/20 to-yellow-600/20 backdrop-blur-xl border border-amber-500/30 rounded-lg p-4 shadow-2xl">
+          <div className="bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-xl border border-slate-600/30 rounded-lg p-4 shadow-2xl">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-amber-400 animate-pulse" />
+                <AlertTriangle className="w-6 h-6 text-slate-300 animate-pulse" />
               </div>
               <div className="flex-1">
-                <h3 className="text-amber-200 font-semibold mb-1">
+                <h3 className="text-white font-semibold mb-1">
                   Session Timeout Warning
                 </h3>
-                <p className="text-amber-100/80 text-sm mb-3">
+                <p className="text-slate-300/80 text-sm mb-3">
                   Your session will expire in{" "}
-                  <span className="font-bold text-amber-300">
+                  <span className="font-bold text-white">
                     {formatTime(timeRemaining)}
                   </span>{" "}
                   due to inactivity.
@@ -91,7 +91,7 @@ export function SessionTimeoutWarning() {
                   <Button
                     onClick={handleStayActive}
                     size="sm"
-                    className="bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold"
+                    className="bg-white hover:bg-slate-100 text-slate-900 font-semibold"
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Stay Active
