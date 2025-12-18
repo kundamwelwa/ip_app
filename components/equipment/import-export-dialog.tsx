@@ -122,25 +122,87 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
         return;
       }
 
-      // Call import API
-      const response = await fetch('/api/equipment/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ equipment: importData }),
-      });
+      // Call import API with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
 
-      let data;
+      let response;
       try {
-        const text = await response.text();
-        data = text ? JSON.parse(text) : {};
-      } catch (parseError) {
-        console.error("Failed to parse response as JSON:", parseError);
+        response = await fetch('/api/equipment/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ equipment: importData }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          setImportResult({
+            success: false,
+            imported: 0,
+            errors: ["Import request timed out. The import may still be processing. Please check the equipment list or try importing in smaller batches."],
+            warnings: []
+          });
+          setIsProcessing(false);
+          return;
+        }
+        throw fetchError;
+      }
+
+      // Handle different response statuses
+      if (response.status === 504) {
         setImportResult({
           success: false,
           imported: 0,
-          errors: ["An error occurred while processing the import. Please try again."],
+          errors: ["Gateway timeout: The import is taking too long. The server may still be processing your request. Please check the equipment list or try importing in smaller batches."],
+          warnings: []
+        });
+        setIsProcessing(false);
+        return;
+      }
+
+      let data;
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType && contentType.includes('application/json');
+
+      try {
+        if (isJson) {
+          const text = await response.text();
+          data = text ? JSON.parse(text) : {};
+        } else {
+          // Handle non-JSON responses (like HTML error pages or plain text)
+          const text = await response.text();
+          let errorMessage = 'Failed to import equipment';
+          
+          if (response.status >= 500) {
+            errorMessage = 'Server error: The import request could not be completed. Please try again later or contact support.';
+          } else if (response.status === 404) {
+            errorMessage = 'Import endpoint not found. Please refresh the page and try again.';
+          } else if (response.status === 401 || response.status === 403) {
+            errorMessage = 'Authentication error: Please refresh the page and try again.';
+          } else if (text) {
+            // Try to extract meaningful error from text response
+            errorMessage = text.length > 200 ? text.substring(0, 200) + '...' : text;
+          }
+          
+          setImportResult({
+            success: false,
+            imported: 0,
+            errors: [errorMessage],
+            warnings: []
+          });
+          setIsProcessing(false);
+          return;
+        }
+      } catch (parseError) {
+        console.error("Failed to parse response:", parseError);
+        setImportResult({
+          success: false,
+          imported: 0,
+          errors: [`Error processing server response: ${response.status} ${response.statusText}. Please try again.`],
           warnings: []
         });
         setIsProcessing(false);
@@ -148,7 +210,8 @@ export function ImportExportDialog({ isOpen, onClose, onImport, equipment }: Imp
       }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to import equipment');
+        const errorMessage = data?.error || `Import failed with status ${response.status}. Please try again.`;
+        throw new Error(errorMessage);
       }
 
       // Set success result
