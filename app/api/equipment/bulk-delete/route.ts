@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+// Increase timeout for bulk operations (2 minutes)
+export const maxDuration = 120;
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
     const existingIds = existingEquipment.map((eq) => eq.id);
     const missingIds = equipmentIds.filter((id) => !existingIds.includes(id));
 
-    // Delete all equipment in a transaction
+    // Delete all equipment in a transaction with timeout
     const result = await prisma.$transaction(async (tx) => {
       // First, get all IP addresses assigned to these equipment BEFORE deleting assignments
       const ipAssignments = await tx.iPAssignment.findMany({
@@ -125,6 +128,8 @@ export async function POST(request: Request) {
       console.log(`Successfully deleted ${deleted.count} equipment items:`, existingIds);
 
       return { deleted, missingIds };
+    }, {
+      timeout: 120000, // 2 minute timeout for bulk delete transaction
     });
 
     // Verify deletions

@@ -8,6 +8,9 @@ import {
   getEquipmentCommunicationStatus 
 } from "@/lib/equipment-communication";
 
+// Increase timeout for equipment status checks (2 minutes)
+export const maxDuration = 120;
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -20,13 +23,30 @@ export async function GET(request: NextRequest) {
     const checkAll = searchParams.get("checkAll") === "true";
 
     if (checkAll) {
-      // Check all equipment status
-      const results = await checkAllEquipmentStatus();
-      return NextResponse.json({
-        success: true,
-        results,
-        timestamp: new Date().toISOString()
-      });
+      // Check all equipment status with timeout protection
+      try {
+        const results = await Promise.race([
+          checkAllEquipmentStatus(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Equipment status check timed out')), 90000) // 90 second timeout
+          )
+        ]) as Awaited<ReturnType<typeof checkAllEquipmentStatus>>;
+        
+        return NextResponse.json({
+          success: true,
+          results,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error("Error checking all equipment status:", error);
+        // Return partial results or cached status instead of failing completely
+        return NextResponse.json({
+          success: false,
+          error: error instanceof Error ? error.message : "Equipment status check timed out or failed",
+          message: "Status check is taking too long. Please try checking individual equipment or refresh the page.",
+          timestamp: new Date().toISOString()
+        }, { status: 504 });
+      }
     } else if (equipmentId) {
       // Check specific equipment
       const result = await checkEquipmentStatus(equipmentId);

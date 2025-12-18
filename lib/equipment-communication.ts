@@ -32,7 +32,7 @@ export interface EquipmentHeartbeat {
 /**
  * Ping an IP address to check if equipment is reachable
  */
-export async function pingEquipment(ipAddress: string, timeout: number = 5000): Promise<{
+export async function pingEquipment(ipAddress: string, timeout: number = 2000): Promise<{
   isOnline: boolean;
   responseTime?: number;
   error?: string;
@@ -225,7 +225,7 @@ export async function checkEquipmentStatus(equipmentId: string): Promise<Equipme
 }
 
 /**
- * Check all equipment statuses
+ * Check all equipment statuses with optimized batch processing
  */
 export async function checkAllEquipmentStatus(): Promise<EquipmentCommunicationResult[]> {
   try {
@@ -241,13 +241,59 @@ export async function checkAllEquipmentStatus(): Promise<EquipmentCommunicationR
       }
     });
 
+    // If no equipment, return empty array
+    if (equipment.length === 0) {
+      return [];
+    }
+
     const results: EquipmentCommunicationResult[] = [];
 
-    // Check each equipment in parallel (with some concurrency limit)
-    const batchSize = 10;
+    // Optimize: Use smaller batches and shorter timeout per ping
+    // Also, skip ping for equipment without IP addresses to speed things up
+    const batchSize = 5; // Reduced batch size for faster processing
+    const pingTimeout = 2000; // 2 second timeout per ping instead of 5
+    
     for (let i = 0; i < equipment.length; i += batchSize) {
       const batch = equipment.slice(i, i + batchSize);
-      const batchPromises = batch.map(eq => checkEquipmentStatus(eq.id));
+      
+      // Process batch with timeout protection
+      const batchPromises = batch.map(async (eq) => {
+        // If no IP assignment, return offline status immediately
+        if (!eq.ipAssignments || eq.ipAssignments.length === 0) {
+          return {
+            equipmentId: eq.id,
+            ipAddress: "N/A",
+            isOnline: false,
+            lastSeen: eq.lastSeen || new Date(),
+            error: "No IP address assigned"
+          };
+        }
+        
+        // Use shorter timeout for ping
+        try {
+          return await Promise.race([
+            checkEquipmentStatus(eq.id),
+            new Promise<EquipmentCommunicationResult>((resolve) => 
+              setTimeout(() => resolve({
+                equipmentId: eq.id,
+                ipAddress: eq.ipAssignments[0]?.ipAddress?.address || "Unknown",
+                isOnline: false,
+                lastSeen: eq.lastSeen || new Date(),
+                error: "Status check timed out"
+              }), 3000) // 3 second timeout per equipment
+            )
+          ]);
+        } catch (error) {
+          return {
+            equipmentId: eq.id,
+            ipAddress: eq.ipAssignments[0]?.ipAddress?.address || "Unknown",
+            isOnline: false,
+            lastSeen: eq.lastSeen || new Date(),
+            error: error instanceof Error ? error.message : "Unknown error"
+          };
+        }
+      });
+      
       const batchResults = await Promise.all(batchPromises);
       results.push(...batchResults);
     }
