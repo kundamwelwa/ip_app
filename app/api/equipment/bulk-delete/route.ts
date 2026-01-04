@@ -170,7 +170,7 @@ export async function POST(request: Request) {
     if (error instanceof Error) {
       errorMessage = error.message;
       // Check for Prisma errors
-      const prismaError = error as any;
+      const prismaError = error as { code?: string; meta?: { target?: string }; message?: string };
       if (prismaError.code) {
         if (prismaError.code === 'P2003') {
           errorMessage = "Cannot delete equipment: it is referenced by other records";

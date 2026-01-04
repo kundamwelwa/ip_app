@@ -82,23 +82,47 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     )
-  } catch (error: any) {
+  } catch (error: unknown) {
+    // Extract error information safely
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorName = error instanceof Error ? error.name : ''
+    const prismaError = error as { code?: string; meta?: unknown }
+    
     console.error("Registration error:", error)
     console.error("Error details:", {
-      message: error.message,
-      code: error.code,
-      meta: error.meta,
+      message: errorMessage,
+      name: errorName,
+      code: prismaError.code,
+      meta: prismaError.meta,
     })
     
+    // Check for database connection errors
+    
+    if (errorName === 'PrismaClientInitializationError' || 
+        errorMessage.includes('FATAL') ||
+        errorMessage.includes('Tenant or user not found') ||
+        errorMessage.includes('database') ||
+        errorMessage.includes('connection')) {
+      return NextResponse.json(
+        { 
+          error: "Database connection error. Please check your database configuration.",
+          details: process.env.NODE_ENV === 'development' 
+            ? errorMessage 
+            : "The database connection could not be established. Please verify your DATABASE_URL environment variable."
+        },
+        { status: 500 }
+      )
+    }
+    
     // Check for specific Prisma errors
-    if (error.code === 'P2002') {
+    if (prismaError.code === 'P2002') {
       return NextResponse.json(
         { error: "A user with this email already exists" },
         { status: 400 }
       )
     }
     
-    if (error.code === 'P2003') {
+    if (prismaError.code === 'P2003') {
       return NextResponse.json(
         { error: "Database constraint violation" },
         { status: 400 }
@@ -108,7 +132,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: "Internal server error",
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
       },
       { status: 500 }
     )
