@@ -266,7 +266,7 @@ export function EnhancedImportDialog({
       });
 
       // Prepare for batching
-      const BATCH_SIZE = 20; // Small batch size to avoid timeouts
+      const BATCH_SIZE = 5; // Ultra-small batch size to prevent Vercel/Database timeouts
       const batches = [];
       for (let i = 0; i < formattedData.length; i += BATCH_SIZE) {
         batches.push(formattedData.slice(i, i + BATCH_SIZE));
@@ -278,10 +278,12 @@ export function EnhancedImportDialog({
       const allErrors: string[] = [];
       const allWarnings: string[] = [];
 
+      console.log(`Starting import: ${totalItems} items, ${batches.length} batches.`);
+
       setProgress({
         stage: 'importing',
-        message: `Starting import of ${totalItems} items in ${batches.length} batches...`,
-        progress: 15,
+        message: `Starting safe import of ${totalItems} items...`,
+        progress: 5,
       });
 
       // Process batches sequentially
@@ -293,8 +295,11 @@ export function EnhancedImportDialog({
           setProgress({
             stage: 'importing',
             message: `Importing batch ${currentBatchNum}/${batches.length} (${processedCount}/${totalItems})...`,
-            progress: 15 + Math.round((processedCount / totalItems) * 75),
+            progress: 5 + Math.round((processedCount / totalItems) * 90),
           });
+
+          // Short pause between batches to let DB connection pool recover
+          if (i > 0) await new Promise(r => setTimeout(r, 200));
 
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout per batch
