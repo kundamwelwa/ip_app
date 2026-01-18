@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import * as XLSX from 'xlsx';
 import {
   Upload,
   X,
@@ -111,7 +112,7 @@ export function EnhancedImportDialog({
       });
 
       const validation = await validateExcelStructure(file);
-      
+
       if (!validation.isValid) {
         setError(validation.errors.join('; '));
         setProgress({ stage: 'error', message: 'Invalid file structure', progress: 0 });
@@ -221,34 +222,40 @@ export function EnhancedImportDialog({
         progress: 25,
       });
 
-      // Filter out duplicates
-      const { filtered, skipped, warnings } = filterDuplicates(parsedData, duplicateChecks);
+      // Filter duplicates? No, we want to allow updates (Upsert).
+      // The user wants to import/update ALL IPs in the sheet.
+      // We will still warn them, but we won't filter them out.
 
-      if (filtered.length === 0) {
+      const { warnings } = filterDuplicates(parsedData, duplicateChecks);
+      // We ignore 'filtered' and 'skipped' from filterDuplicates because we want to process everything.
+
+      const equipmentToImportData = parsedData; // Process all data
+
+      if (equipmentToImportData.length === 0) {
         setImportResult({
           success: false,
           imported: 0,
-          skipped,
-          errors: ['All IP addresses already exist in the system'],
-          warnings,
-          duplicates: duplicateChecks,
+          skipped: 0,
+          errors: ['No data found to import'],
+          warnings: [],
+          duplicates: [],
         });
-        setProgress({ stage: 'error', message: 'No new data to import', progress: 0 });
+        setProgress({ stage: 'error', message: 'No data to import', progress: 0 });
         setCurrentStep('complete');
         return;
       }
 
-      const totalIPs = filtered.reduce((sum, e) => sum + e.systems.length, 0);
+      const totalIPs = equipmentToImportData.reduce((sum, e) => sum + e.systems.length, 0);
       setProgress({
         stage: 'importing',
-        message: `Importing ${filtered.length} equipment (${totalIPs} IP addresses total)...`,
+        message: `Importing ${equipmentToImportData.length} records (${totalIPs} IP addresses total)...`,
         progress: 40,
       });
 
-      const equipmentToImport = filtered.map((equipment) => {
+      const equipmentToImport = equipmentToImportData.map((equipment) => {
         const firstSystem = equipment.systems[0];
         const equipmentType = inferEquipmentType(equipment.machineId, firstSystem?.system || '');
-        
+
         const equipmentName = equipment.machineId;
 
         // Collect all IP addresses for this equipment
@@ -345,7 +352,7 @@ export function EnhancedImportDialog({
       setImportResult({
         success: data.results.successful > 0,
         imported: data.results.successful,
-        skipped: skipped + (data.results.failed || 0),
+        skipped: 0 + (data.results.failed || 0),
         errors: data.results.errors || [],
         warnings: [...warnings, ...duplicateReport.duplicateDetails],
         duplicates: duplicateChecks,
@@ -380,6 +387,8 @@ export function EnhancedImportDialog({
     }
   };
 
+  // ... (existing imports)
+
   const downloadTemplate = () => {
     const headers = [
       'MACHINE ID',
@@ -391,26 +400,31 @@ export function EnhancedImportDialog({
     ];
 
     const sampleData = [
-      ['FS03', 'ROCKY COMPUTER', '10.31.141.216', '255.255.255.0', '10.31.141.1', 'ip addresses done'],
-      ['FS03', 'PLC S7-400', '10.31.141.213', '255.255.255.0', '10.31.141.1', 'ip addresses done'],
-      ['FS03', 'SIBAS', '10.31.141.219', '255.255.255.0', '10.31.141.1', 'ip addresses done'],
-      ['FS02', 'ROCKY COMPUTER', '10.31.145.211', '255.255.255.0', '10.31.145.1', 'ip addresses done'],
-      ['FS02', 'PLC S7-400', '10.31.145.212', '255.255.255.0', '10.31.145.1', 'ip addresses done'],
+      ['FS03', 'ROCKY COMPUTER', '10.31.141.216', '255.255.255.0', '10.31.141.1', 'Example equipment entry'],
+      ['FS03', 'PLC S7-400', '10.31.141.213', '255.255.255.0', '10.31.141.1', 'PLC Controller'],
+      ['FS02', 'ROCKY COMPUTER', '10.31.145.211', '255.255.255.0', '10.31.145.1', 'Another unit'],
+      ['SERVER-01', 'MAIN', '192.168.1.10', '255.255.255.0', '192.168.1.1', 'Infrastructure server'],
     ];
 
-    const csvContent = [headers, ...sampleData]
-      .map((row) => row.join(','))
-      .join('\n');
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'equipment-import-template.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Set column widths for better readability
+    const wscols = [
+      { wch: 15 }, // MACHINE ID
+      { wch: 25 }, // SYSTEM
+      { wch: 15 }, // IP ADDRESS
+      { wch: 15 }, // SUBNET MASK
+      { wch: 15 }, // GATEWAY
+      { wch: 30 }, // COMMENTS
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Import Template');
+
+    // Generate file and trigger download
+    XLSX.writeFile(wb, 'ip_equipment_import_template.xlsx');
   };
 
   return (
@@ -533,11 +547,10 @@ export function EnhancedImportDialog({
           {currentStep === 'complete' && importResult && (
             <div className="space-y-4">
               <div
-                className={`p-4 rounded-lg border ${
-                  importResult.success
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                    : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-                }`}
+                className={`p-4 rounded-lg border ${importResult.success
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                  : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  }`}
               >
                 <div className="flex items-center gap-2 mb-2">
                   {importResult.success ? (
@@ -546,11 +559,10 @@ export function EnhancedImportDialog({
                     <AlertTriangle className="h-5 w-5 text-red-600" />
                   )}
                   <span
-                    className={`font-medium ${
-                      importResult.success
-                        ? 'text-green-800 dark:text-green-200'
-                        : 'text-red-800 dark:text-red-200'
-                    }`}
+                    className={`font-medium ${importResult.success
+                      ? 'text-green-800 dark:text-green-200'
+                      : 'text-red-800 dark:text-red-200'
+                      }`}
                   >
                     {importResult.success ? 'Import Completed' : 'Import Failed'}
                   </span>

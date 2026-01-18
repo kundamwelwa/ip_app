@@ -38,6 +38,7 @@ import {
 import { IPChecker } from "@/components/ip/ip-checker";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { SystemIntegrityMonitor } from "@/components/dashboard/system-integrity-monitor";
+import { DashboardIPTableSection } from "@/components/dashboard/dashboard-ip-table-section";
 import { AssignmentDialog, AssignmentFormData } from "@/components/ip/assignment-dialog";
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
 import { ReservationDialog, ReservationFormData } from "@/components/ip/reservation-dialog";
@@ -115,13 +116,13 @@ interface DashboardData {
 
 export function MiningDashboard() {
   const { data: session } = useSession();
-  
+
   // Get user's first name from session
   const getFirstName = () => {
     if (!session?.user?.name) return "";
     return session.user.name.split(" ")[0];
   };
-  
+
   // Set default tab based on enabled features
   const getDefaultTab = () => {
     if (isDashboardFeatureEnabled("showEquipmentSection")) return "equipment";
@@ -137,10 +138,10 @@ export function MiningDashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Toast notifications
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: "success" | "error" | "warning" | "info" }>>([]);
-  
+
   // Confirmation dialogs
   const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
   const [unassignIP, setUnassignIP] = useState("");
@@ -180,19 +181,19 @@ export function MiningDashboard() {
 
   // Fetch dashboard data function
   const fetchDashboardData = async (useRealTime = false) => {
-      try {
-        setLoading(true);
+    try {
+      setLoading(true);
       const url = useRealTime ? "/api/dashboard?realTime=true" : "/api/dashboard";
       const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error("Failed to fetch dashboard data");
-        }
-        const data = await response.json();
-      
+      if (!response.ok) {
+        throw new Error("Failed to fetch dashboard data");
+      }
+      const data = await response.json();
+
       // Process equipment data with real-time information
       const processedEquipment = processEquipmentData(data.equipment, equipmentStatuses);
       const realTimeNetworkStats = calculateNetworkStats(processedEquipment, data.networkStats);
-      
+
       // Update the data with processed real-time information
       const enhancedData = {
         ...data,
@@ -202,14 +203,14 @@ export function MiningDashboard() {
           ...realTimeNetworkStats
         }
       };
-      
+
       setDashboardData(enhancedData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
-      } finally {
-        setLoading(false);
-      }
-    };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch dashboard data on component mount
   useEffect(() => {
@@ -236,8 +237,8 @@ export function MiningDashboard() {
             Error Loading Dashboard
           </h3>
           <p className="text-red-700 dark:text-red-300">{error}</p>
-          <Button 
-            onClick={() => window.location.reload()} 
+          <Button
+            onClick={() => window.location.reload()}
             className="mt-4"
             variant="outline"
           >
@@ -393,7 +394,7 @@ export function MiningDashboard() {
       showToast(`IP address ${currentIP} successfully assigned to ${equipmentName}`, "success");
       await fetchDashboardData();
       setIsEquipmentSelectionOpen(false);
-      
+
     } catch (error) {
       console.error("Error assigning IP address:", error);
       showToast(`Failed to assign IP address: ${error instanceof Error ? error.message : 'Unknown error'}`, "error");
@@ -482,11 +483,10 @@ export function MiningDashboard() {
       {isDashboardFeatureEnabled("ipChecker") && (
         <div
           id="ip-address-checker"
-          className={`transition-all duration-500 rounded-lg ${
-            ipCheckerGlow
-              ? "ring-4 ring-blue-500 ring-opacity-75 shadow-[0_0_20px_rgba(59,130,246,0.5)] dark:ring-blue-400 dark:shadow-[0_0_20px_rgba(96,165,250,0.5)]"
-              : ""
-          }`}
+          className={`transition-all duration-500 rounded-lg ${ipCheckerGlow
+            ? "ring-4 ring-blue-500 ring-opacity-75 shadow-[0_0_20px_rgba(59,130,246,0.5)] dark:ring-blue-400 dark:shadow-[0_0_20px_rgba(96,165,250,0.5)]"
+            : ""
+            }`}
         >
           <IPChecker
             onAssignIP={handleAssignIP}
@@ -549,7 +549,7 @@ export function MiningDashboard() {
             <CardContent>
               <div className="card-number-large text-green-700 dark:text-green-400">{dashboardData.ipSummary.assigned}</div>
               <p className="card-text-secondary text-xs">
-                {dashboardData.ipSummary.total > 0 
+                {dashboardData.ipSummary.total > 0
                   ? `${Math.round((dashboardData.ipSummary.assigned / dashboardData.ipSummary.total) * 100)}% of total`
                   : "No IPs available"}
               </p>
@@ -604,13 +604,12 @@ export function MiningDashboard() {
                 <div className="flex items-center space-x-2">
                   <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
                     <div
-                      className={`h-2 rounded-full ${
-                        dashboardData.networkStats.uptime >= 95 
-                          ? 'bg-green-500' 
-                          : dashboardData.networkStats.uptime >= 85 
-                            ? 'bg-yellow-500' 
-                            : 'bg-red-500'
-                      }`}
+                      className={`h-2 rounded-full ${dashboardData.networkStats.uptime >= 95
+                        ? 'bg-green-500'
+                        : dashboardData.networkStats.uptime >= 85
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                        }`}
                       style={{ width: `${dashboardData.networkStats.uptime}%` }}
                     ></div>
                   </div>
@@ -640,13 +639,12 @@ export function MiningDashboard() {
                 <div className="flex items-center space-x-2">
                   <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
                     <div
-                      className={`h-2 rounded-full ${
-                        dashboardData.networkStats.meshStrength >= 80 
-                          ? 'bg-blue-500' 
-                          : dashboardData.networkStats.meshStrength >= 60 
-                            ? 'bg-yellow-500' 
-                            : 'bg-red-500'
-                      }`}
+                      className={`h-2 rounded-full ${dashboardData.networkStats.meshStrength >= 80
+                        ? 'bg-blue-500'
+                        : dashboardData.networkStats.meshStrength >= 60
+                          ? 'bg-yellow-500'
+                          : 'bg-red-500'
+                        }`}
                       style={{ width: `${dashboardData.networkStats.meshStrength}%` }}
                     ></div>
                   </div>
@@ -676,222 +674,225 @@ export function MiningDashboard() {
             {isDashboardFeatureEnabled("showAlertsSection") && (
               <TabsTrigger value="alerts" className="text-xs sm:text-sm">Alerts</TabsTrigger>
             )}
+            <TabsTrigger value="ip-tables" className="text-xs sm:text-sm">IP Tables</TabsTrigger>
           </TabsList>
         </div>
 
+        <TabsContent value="ip-tables" className="space-y-4">
+          <DashboardIPTableSection />
+        </TabsContent>
+
         {isDashboardFeatureEnabled("showOverviewTab") && (
           <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-            {/* Equipment Status Overview */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Equipment Status</CardTitle>
-                <CardDescription>Current status of all mining equipment</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {dashboardData.equipment.map((equipment) => (
-                    <div key={equipment.id} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        {getStatusIcon(equipment.status)}
-                        <div>
-                          <p className="font-medium">{equipment.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {equipment.location}
-                          </p>
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+              {/* Equipment Status Overview */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Equipment Status</CardTitle>
+                  <CardDescription>Current status of all mining equipment</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {dashboardData.equipment.map((equipment) => (
+                      <div key={equipment.id} className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getStatusIcon(equipment.status)}
+                          <div>
+                            <p className="font-medium">{equipment.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {equipment.location}
+                            </p>
+                          </div>
                         </div>
+                        <Badge className={getStatusColor(equipment.status)}>
+                          {equipment.status}
+                        </Badge>
                       </div>
-                      <Badge className={getStatusColor(equipment.status)}>
-                        {equipment.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Network Performance */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Real-time Network Performance</CardTitle>
-                <CardDescription>Live network metrics and performance data</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Bandwidth</span>
-                    <div className="flex items-center space-x-2">
-                    <span className="text-sm text-muted-foreground">{dashboardData.networkStats.bandwidth}</span>
-                      <Badge variant="outline" className="text-xs">
-                        Live
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Latency</span>
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-medium ${
-                        dashboardData.networkStats.latency <= 20 ? 'text-green-700 dark:text-green-400' :
-                        dashboardData.networkStats.latency <= 50 ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'
-                      }`}>
-                        {dashboardData.networkStats.latency}ms
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        Real-time
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Mesh Strength</span>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-                        <div
-                          className={`h-2 rounded-full ${
-                            dashboardData.networkStats.meshStrength >= 80 
-                              ? 'bg-blue-500' 
-                              : dashboardData.networkStats.meshStrength >= 60 
-                                ? 'bg-yellow-500' 
-                                : 'bg-red-500'
-                          }`}
-                          style={{ width: `${dashboardData.networkStats.meshStrength}%` }}
-                        ></div>
+              {/* Network Performance */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Real-time Network Performance</CardTitle>
+                  <CardDescription>Live network metrics and performance data</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Bandwidth</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm text-muted-foreground">{dashboardData.networkStats.bandwidth}</span>
+                        <Badge variant="outline" className="text-xs">
+                          Live
+                        </Badge>
                       </div>
-                      <span className={`text-sm font-medium ${getSignalStrengthColor(dashboardData.networkStats.meshStrength)}`}>
-                        {dashboardData.networkStats.meshStrength}%
-                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Latency</span>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-sm font-medium ${dashboardData.networkStats.latency <= 20 ? 'text-green-700 dark:text-green-400' :
+                          dashboardData.networkStats.latency <= 50 ? 'text-yellow-700 dark:text-yellow-400' : 'text-red-700 dark:text-red-400'
+                          }`}>
+                          {dashboardData.networkStats.latency}ms
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          Real-time
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Mesh Strength</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-16 bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                          <div
+                            className={`h-2 rounded-full ${dashboardData.networkStats.meshStrength >= 80
+                              ? 'bg-blue-500'
+                              : dashboardData.networkStats.meshStrength >= 60
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                              }`}
+                            style={{ width: `${dashboardData.networkStats.meshStrength}%` }}
+                          ></div>
+                        </div>
+                        <span className={`text-sm font-medium ${getSignalStrengthColor(dashboardData.networkStats.meshStrength)}`}>
+                          {dashboardData.networkStats.meshStrength}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Active Nodes</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm text-muted-foreground">
+                          {dashboardData.networkStats.activeNodes}/{dashboardData.networkStats.totalNodes}
+                        </span>
+                        <Badge variant={dashboardData.networkStats.activeNodes === dashboardData.networkStats.totalNodes ? "default" : "secondary"} className="text-xs">
+                          {dashboardData.networkStats.activeNodes === dashboardData.networkStats.totalNodes ? 'All Online' : 'Partial'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Data Rate</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                          {dashboardData.networkStats.totalDataRate || 0} Mbps
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          Total
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">Network Health</span>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-sm font-medium ${getNetworkHealthColor(dashboardData.networkStats.networkHealth || 'good')}`}>
+                          {dashboardData.networkStats.networkHealth || 'good'}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {dashboardData.networkStats.uptime}% uptime
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Active Nodes</span>
-                    <div className="flex items-center space-x-2">
-                    <span className="text-sm text-muted-foreground">
-                      {dashboardData.networkStats.activeNodes}/{dashboardData.networkStats.totalNodes}
-                    </span>
-                      <Badge variant={dashboardData.networkStats.activeNodes === dashboardData.networkStats.totalNodes ? "default" : "secondary"} className="text-xs">
-                        {dashboardData.networkStats.activeNodes === dashboardData.networkStats.totalNodes ? 'All Online' : 'Partial'}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Data Rate</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
-                        {dashboardData.networkStats.totalDataRate || 0} Mbps
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        Total
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Network Health</span>
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-medium ${getNetworkHealthColor(dashboardData.networkStats.networkHealth || 'good')}`}>
-                        {dashboardData.networkStats.networkHealth || 'good'}
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        {dashboardData.networkStats.uptime}% uptime
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
         )}
 
         {isDashboardFeatureEnabled("showEquipmentSection") && (
           <TabsContent value="equipment" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipment Details</CardTitle>
-              <CardDescription>Detailed view of all mining equipment and their network status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-                <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>IP Address</TableHead>
-                    <TableHead>Real-time Status</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Operator</TableHead>
-                    <TableHead>IP Assigned By</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboardData.equipment.map((equipment) => {
-                    // Use processed equipment data with real-time information
-                    const isOnline = equipment.isOnline;
-                    const responseTime = equipment.responseTime;
-                    const uptime = equipment.uptime;
-                    const signalStrength = equipment.signalStrength;
-                    const timeAgo = equipment.timeAgo;
-                    const lastSeenFormatted = equipment.lastSeenFormatted;
-                    
-                    return (
-                    <TableRow key={equipment.id}>
-                      <TableCell className="font-medium">{equipment.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{equipment.type}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">{equipment.ip}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(isOnline ? "ONLINE" : "OFFLINE")}
-                          <Badge className={getStatusColor(isOnline ? "ONLINE" : "OFFLINE")}>
-                            {isOnline ? "ONLINE" : "OFFLINE"}
-                          </Badge>
-                          {isOnline && (
-                            <Badge variant="outline" className="text-xs">
-                              Real-time
-                            </Badge>
-                          )}
-                          {responseTime && (
-                            <span className="text-xs text-muted-foreground">
-                              {responseTime}ms
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <MapPin className="h-3 w-3" />
-                          <span className="text-sm">{equipment.location}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {equipment.operator ? (
-                          <div className="flex items-center space-x-1">
-                            <User className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            <span className="text-sm font-medium">{equipment.operator}</span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not assigned</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {equipment.ip !== "Not assigned" && equipment.assignedBy ? (
-                          <div className="text-sm">
-                            <div className="font-medium">{equipment.assignedBy}</div>
-                            <div className="text-xs text-muted-foreground">IP Assignment</div>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <Card>
+              <CardHeader>
+                <CardTitle>Equipment Details</CardTitle>
+                <CardDescription>Detailed view of all mining equipment and their network status</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Equipment</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>IP Address</TableHead>
+                        <TableHead>Real-time Status</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Operator</TableHead>
+                        <TableHead>IP Assigned By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboardData.equipment.map((equipment) => {
+                        // Use processed equipment data with real-time information
+                        const isOnline = equipment.isOnline;
+                        const responseTime = equipment.responseTime;
+                        const uptime = equipment.uptime;
+                        const signalStrength = equipment.signalStrength;
+                        const timeAgo = equipment.timeAgo;
+                        const lastSeenFormatted = equipment.lastSeenFormatted;
+
+                        return (
+                          <TableRow key={equipment.id}>
+                            <TableCell className="font-medium">{equipment.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{equipment.type}</Badge>
+                            </TableCell>
+                            <TableCell className="font-mono">{equipment.ip}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2">
+                                {getStatusIcon(isOnline ? "ONLINE" : "OFFLINE")}
+                                <Badge className={getStatusColor(isOnline ? "ONLINE" : "OFFLINE")}>
+                                  {isOnline ? "ONLINE" : "OFFLINE"}
+                                </Badge>
+                                {isOnline && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Real-time
+                                  </Badge>
+                                )}
+                                {responseTime && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {responseTime}ms
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-1">
+                                <MapPin className="h-3 w-3" />
+                                <span className="text-sm">{equipment.location}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {equipment.operator ? (
+                                <div className="flex items-center space-x-1">
+                                  <User className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                                  <span className="text-sm font-medium">{equipment.operator}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">Not assigned</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {equipment.ip !== "Not assigned" && equipment.assignedBy ? (
+                                <div className="text-sm">
+                                  <div className="font-medium">{equipment.assignedBy}</div>
+                                  <div className="text-xs text-muted-foreground">IP Assignment</div>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
 
         {isDashboardFeatureEnabled("showNetworkTopologySection") && (
@@ -902,31 +903,31 @@ export function MiningDashboard() {
 
         {isDashboardFeatureEnabled("showAlertsSection") && (
           <TabsContent value="alerts" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>System Alerts</CardTitle>
-              <CardDescription>Recent alerts and notifications from the mesh network</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {dashboardData.alerts.map((alert) => (
-                  <div key={alert.id} className="flex items-start space-x-3 p-3 border rounded-lg">
-                    {getAlertIcon(alert.type)}
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{alert.message}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {alert.equipment} • {alert.time}
-                      </p>
+            <Card>
+              <CardHeader>
+                <CardTitle>System Alerts</CardTitle>
+                <CardDescription>Recent alerts and notifications from the mesh network</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {dashboardData.alerts.map((alert) => (
+                    <div key={alert.id} className="flex items-start space-x-3 p-3 border rounded-lg">
+                      {getAlertIcon(alert.type)}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{alert.message}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {alert.equipment} • {alert.time}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        View
+                      </Button>
                     </div>
-                    <Button variant="outline" size="sm">
-                      View
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         )}
       </Tabs>
 

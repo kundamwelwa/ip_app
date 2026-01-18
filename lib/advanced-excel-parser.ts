@@ -36,10 +36,10 @@ export async function detectSheets(file: File): Promise<SheetInfo[]> {
         const sheets: SheetInfo[] = workbook.SheetNames.map((name) => {
           const worksheet = workbook.Sheets[name];
           const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-          
+
           const rowCount = range.e.r - range.s.r + 1;
           const columnCount = range.e.c - range.s.c + 1;
-          
+
           // Check if sheet has actual data (not just headers)
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
           const hasData = jsonData.length > 1;
@@ -89,7 +89,7 @@ export async function parseExcelSheet(
         }
 
         // Convert to JSON array
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
           header: 1,
           defval: '',
           blankrows: false
@@ -114,25 +114,66 @@ export async function parseExcelSheet(
 
         // Detect column structure
         const headerRow = jsonData[0];
-        const columnMap = detectColumnStructure(headerRow);
+        const initialColumnMap = detectColumnStructure(headerRow);
+        const hasHeader = Object.values(initialColumnMap).some(idx => idx !== -1);
 
-        console.log('🔍 Column Mapping:', columnMap);
+        // Optimize IP Column Detection:
+        // Scan data to find the column with the most UNIQUE IPs usually indicates the primary IP column
+        // This prevents selecting "Gateway" or "Server IP" columns which often have repeated values
+        const ipColumnStats = new Map<number, Set<string>>();
+        const dataRowsToCheck = jsonData.slice(hasHeader ? 1 : 0, Math.min(jsonData.length, 100)); // Check first 100 rows
 
-        // Parse data rows (start from row 1, or row 0 if no clear header)
+        dataRowsToCheck.forEach(row => {
+          row.forEach((cell: any, index: number) => {
+            const val = cell?.toString().trim();
+            if (isValidIPAddress(val)) {
+              if (!ipColumnStats.has(index)) {
+                ipColumnStats.set(index, new Set());
+              }
+              ipColumnStats.get(index)!.add(val);
+            }
+          });
+        });
+
+        // Find column with most unique IPs
+        let bestIpCol = initialColumnMap.ipAddress;
+        let maxUnique = 0;
+
+        // Check currently mapped column first
+        if (ipColumnStats.has(bestIpCol)) {
+          maxUnique = ipColumnStats.get(bestIpCol)!.size;
+        }
+
+        ipColumnStats.forEach((uniqueIps, colIndex) => {
+          // If this column has significantly more unique IPs, it's likely the real IP column
+          // Or if no IP column was detected (-1), this is a candidate
+          if (uniqueIps.size > maxUnique) {
+            maxUnique = uniqueIps.size;
+            bestIpCol = colIndex;
+          }
+        });
+
+        // Update map if we found a better column (and it's not the machine ID column, to avoid confusing ID for IP)
+        if (bestIpCol !== -1 && bestIpCol !== initialColumnMap.machineId) {
+          initialColumnMap.ipAddress = bestIpCol;
+        }
+
+        const columnMap = initialColumnMap;
+        console.log('🔍 Optimized Column Mapping:', columnMap);
+
+        // Parse data rows
         const parsedData: ParsedEquipmentData[] = [];
         const seenIPs = new Set<string>();
         const ipFirstSeen = new Map<string, { row: number; machineId: string; system: string }>();
         const duplicateMap = new Map<string, DuplicateInFile>();
         const skippedRows: { rowIndex: number; reason: string }[] = [];
 
-        // Determine start row (skip header if detected)
-        const hasHeader = Object.values(columnMap).some(idx => idx !== -1);
         const startRow = hasHeader ? 1 : 0;
         let currentMachineId = '';
 
         for (let rowIndex = startRow; rowIndex < jsonData.length; rowIndex++) {
           const row = jsonData[rowIndex];
-          
+
           // Skip empty rows
           if (!row || row.every((cell: any) => !cell || cell.toString().trim() === '')) {
             continue;
@@ -153,11 +194,18 @@ export async function parseExcelSheet(
           const machineId = currentMachineId || rawMachineId || `EQUIPMENT_${rowIndex}`;
           const system = rawSystem && !isHeaderValue(rawSystem) ? rawSystem : 'MAIN SYSTEM';
 
-          // More flexible IP validation - also check all cells for IPs
+          // Use the detected IP directly. 
+          // If the detected column logic works, we shouldn't need to scan the whole row again blindly,
+          // as that often picks up the WRONG IP (like gateway) if the main IP cell is missing/invalid.
+          // However, if the cell is strictly EMPTY, we can try to fallback, but be careful.
           let foundIP = ipAddress;
+
+          // If mapped cell is empty/invalid, try finding ANY valid IP in remaining cells
           if (!isValidIPAddress(foundIP)) {
-            // Try to find an IP in any cell of this row
             for (let i = 0; i < row.length; i++) {
+              // Don't pick values from known non-IP columns (like machine ID or System if they look like IPs)
+              if (i === columnMap.machineId || i === columnMap.system) continue;
+
               const cellValue = row[i] ? row[i].toString().trim() : '';
               if (isValidIPAddress(cellValue)) {
                 foundIP = cellValue;
@@ -168,9 +216,9 @@ export async function parseExcelSheet(
 
           // Validate IP address
           if (!isValidIPAddress(foundIP)) {
-            skippedRows.push({ 
-              rowIndex: rowIndex + 1, 
-              reason: `No valid IP found (attempted: "${ipAddress}")` 
+            skippedRows.push({
+              rowIndex: rowIndex + 1,
+              reason: `No valid IP found (attempted: "${ipAddress}")`
             });
             continue;
           }
@@ -285,7 +333,7 @@ function detectColumnStructure(headerRow: any[]): {
 
   headerRow.forEach((header, index) => {
     if (!header) return;
-    
+
     const headerStr = header.toString().toLowerCase().trim().replace(/[_\s-]/g, '');
 
     // Machine ID detection (more flexible patterns)
@@ -440,7 +488,7 @@ export function inferEquipmentType(machineId: string, systemName: string): strin
   if (combined.includes('crusher')) return 'CRUSHER';
   if (combined.includes('conveyor')) return 'CONVEYOR';
   if (combined.includes('grader')) return 'GRADER';
-  
+
   return 'OTHER';
 }
 
@@ -464,7 +512,7 @@ export async function validateExcelStructure(file: File): Promise<{
 }> {
   try {
     const sheets = await detectSheets(file);
-    
+
     const errors: string[] = [];
     const warnings: string[] = [];
 

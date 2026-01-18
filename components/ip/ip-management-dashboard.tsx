@@ -1,22 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Loader2, 
-  RefreshCw, 
-  Save, 
-  Lock, 
-  FileText, 
-  Network, 
-  Plus, 
-  Search, 
-  Edit, 
-  Trash2, 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
-  MapPin, 
-  Clock, 
+import {
+  Loader2,
+  RefreshCw,
+  Save,
+  Lock,
+  FileText,
+  Network,
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  MapPin,
+  Clock,
   Activity,
   Wifi,
   WifiOff,
@@ -27,6 +27,7 @@ import {
   AlertCircle,
   Filter,
   Download,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -59,7 +60,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { CategorizedIPList } from "@/components/ip/categorized-ip-list";
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
+import { EnhancedImportDialog } from "@/components/import-export/enhanced-import-dialog";
+import { EnhancedExportDialog } from "@/components/import-export/enhanced-export-dialog";
+import { MiningEquipment } from "@/types/equipment";
 import { Toast } from "@/components/ui/toast";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -82,7 +87,7 @@ interface IPAddress {
   address: string;
   subnet: string;
   gateway: string | null;
-  dns: string | null;
+
   status: "AVAILABLE" | "ASSIGNED" | "RESERVED" | "OFFLINE";
   isReserved?: boolean;
   assignedTo?: string;
@@ -94,8 +99,9 @@ interface IPAddress {
   assignedAt?: string | Date;
   lastSeen?: string | Date;
   notes?: string | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
+  dns?: string | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
   assignments?: Array<{
     id: string;
     equipment?: {
@@ -173,6 +179,23 @@ export function IPManagementDashboard() {
   // Advanced filters state
   const [advancedFilters, setAdvancedFilters] = useState<ActiveFilter[]>([]);
 
+  // Import/Export state
+  const [isEnhancedImportDialogOpen, setIsEnhancedImportDialogOpen] = useState(false);
+  const [isEnhancedExportDialogOpen, setIsEnhancedExportDialogOpen] = useState(false);
+  const [fullEquipmentList, setFullEquipmentList] = useState<MiningEquipment[]>([]);
+
+  const fetchFullEquipment = async () => {
+    try {
+      const response = await fetch("/api/equipment?limit=10000");
+      if (response.ok) {
+        const data = await response.json();
+        setFullEquipmentList(data.equipment || []);
+      }
+    } catch (err) {
+      console.error("Error fetching full equipment list:", err);
+    }
+  };
+
   // Toast and Confirmation hooks
   const { toast, hideToast, showSuccess, showError, showWarning } = useToast();
   const { confirmation, showConfirmation, hideConfirmation, confirm } = useConfirmation();
@@ -181,20 +204,20 @@ export function IPManagementDashboard() {
   const [ipAddresses, setIPAddresses] = useState<IPAddress[]>([]);
 
   const [assignments, setAssignments] = useState<IPAssignment[]>([]);
-  
+
   // Fetch IP addresses from API
   const fetchIPAddresses = async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await fetch("/api/ip-addresses?limit=1000");
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch IP addresses");
       }
-      
+
       const data = await response.json();
-      
+
       // Transform API data to match component format
       const transformedIPs: IPAddress[] = data.ipAddresses.map((ip: any) => ({
         id: ip.id,
@@ -214,14 +237,14 @@ export function IPManagementDashboard() {
         equipmentName: ip.assignments?.[0]?.equipment?.name,
         equipmentType: ip.assignments?.[0]?.equipment?.type,
         location: ip.assignments?.[0]?.equipment?.location || "",
-        assignedBy: ip.assignments?.[0]?.user 
-          ? `${ip.assignments[0].user.firstName} ${ip.assignments[0].user.lastName}` 
+        assignedBy: ip.assignments?.[0]?.user
+          ? `${ip.assignments[0].user.firstName} ${ip.assignments[0].user.lastName}`
           : undefined,
-        assignedAt: ip.assignments?.[0]?.assignedAt 
-          ? new Date(ip.assignments[0].assignedAt) 
+        assignedAt: ip.assignments?.[0]?.assignedAt
+          ? new Date(ip.assignments[0].assignedAt)
           : undefined,
       }));
-      
+
       setIPAddresses(transformedIPs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -286,7 +309,7 @@ export function IPManagementDashboard() {
           } else if (log.details?.ipAddress) {
             ipAddress = log.details.ipAddress;
           }
-          
+
           // Get equipment name from the included equipment relation or from details
           let equipmentName = undefined;
           if (log.equipment?.name) {
@@ -294,15 +317,15 @@ export function IPManagementDashboard() {
           } else if (log.details?.equipmentName) {
             equipmentName = log.details.equipmentName;
           }
-          
+
           return {
             id: log.id,
             ipAddress: ipAddress,
             action: log.action.includes("ASSIGNED") || log.action.includes("ASSIGN") ? "assigned" :
-                   log.action.includes("UNASSIGNED") || log.action.includes("UNASSIGN") ? "unassigned" :
-                   log.action.includes("UPDATED") || log.action.includes("MODIFIED") ? "modified" :
-                   log.action.includes("CONFLICT") ? "conflict_detected" :
-                   "modified" as IPAuditLog["action"],
+              log.action.includes("UNASSIGNED") || log.action.includes("UNASSIGN") ? "unassigned" :
+                log.action.includes("UPDATED") || log.action.includes("MODIFIED") ? "modified" :
+                  log.action.includes("CONFLICT") ? "conflict_detected" :
+                    "modified" as IPAuditLog["action"],
             equipmentName: equipmentName,
             performedBy: log.user ? `${log.user.firstName} ${log.user.lastName}` : "System",
             performedAt: new Date(log.createdAt),
@@ -334,12 +357,12 @@ export function IPManagementDashboard() {
               equipmentName: assignment.equipment.name,
               equipmentType: assignment.equipment.type,
               location: assignment.equipment.location || "",
-              assignedBy: assignment.user 
-                ? `${assignment.user.firstName} ${assignment.user.lastName}` 
+              assignedBy: assignment.user
+                ? `${assignment.user.firstName} ${assignment.user.lastName}`
                 : "System",
               assignedAt: new Date(assignment.assignedAt),
               lastSeen: ip.lastSeen ? new Date(ip.lastSeen) : new Date(),
-      status: "active",
+              status: "active",
               notes: undefined,
             });
           }
@@ -362,11 +385,11 @@ export function IPManagementDashboard() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const ipToAdd = urlParams.get('addIP');
-    
+
     if (ipToAdd) {
       // Open the add dialog
       setIsAddDialogOpen(true);
-      
+
       // Pre-fill the IP address field
       setFormData(prev => ({
         ...prev,
@@ -431,12 +454,12 @@ export function IPManagementDashboard() {
   // Filter functions
   const filteredIPs = ipAddresses.filter(ip => {
     const matchesSearch = ip.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ip.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ip.equipmentName?.toLowerCase().includes(searchTerm.toLowerCase());
+      ip.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      ip.equipmentName?.toLowerCase().includes(searchTerm.toLowerCase());
     const normalizedStatus = ip.status.toLowerCase();
     const normalizedFilter = filterStatus.toLowerCase();
     const matchesStatus = filterStatus === "all" || normalizedStatus === normalizedFilter;
-    
+
     // Advanced filters
     const matchesAdvancedFilters = advancedFilters.every(filter => {
       switch (filter.id) {
@@ -455,7 +478,7 @@ export function IPManagementDashboard() {
           return true;
       }
     });
-    
+
     return matchesSearch && matchesStatus && matchesAdvancedFilters;
   });
 
@@ -498,9 +521,9 @@ export function IPManagementDashboard() {
     }
 
     // Validate subnet if it's required via feature flag
-    if (isIPManagementFormFeatureEnabled("showSubnetField") && 
-        isIPManagementFormFeatureEnabled("requireSubnet") && 
-        !formData.subnet) {
+    if (isIPManagementFormFeatureEnabled("showSubnetField") &&
+      isIPManagementFormFeatureEnabled("requireSubnet") &&
+      !formData.subnet) {
       setError("Subnet is required");
       return;
     }
@@ -516,7 +539,7 @@ export function IPManagementDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-      address: formData.address,
+          address: formData.address,
           subnet: subnet,
           gateway: formData.gateway || null,
           dns: formData.dns ? formData.dns.split(',').map((d: string) => d.trim()).join(',') : null,
@@ -530,8 +553,8 @@ export function IPManagementDashboard() {
       }
 
       await fetchIPAddresses();
-    setIsAddDialogOpen(false);
-    resetForm();
+      setIsAddDialogOpen(false);
+      resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add IP address");
       console.error("Error adding IP address:", err);
@@ -576,7 +599,7 @@ export function IPManagementDashboard() {
           // Try to parse JSON error response
           const contentType = response.headers.get("content-type");
           if (contentType && contentType.includes("application/json")) {
-        const errorData = await response.json();
+            const errorData = await response.json();
             errorMessage = errorData.error || errorMessage;
           } else {
             // If not JSON, use status text
@@ -590,9 +613,9 @@ export function IPManagementDashboard() {
       }
 
       await fetchIPAddresses();
-    setIsEditDialogOpen(false);
-    setEditingIP(null);
-    resetForm();
+      setIsEditDialogOpen(false);
+      setEditingIP(null);
+      resetForm();
       showSuccess(`IP address ${formData.address} updated successfully`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update IP address");
@@ -630,9 +653,9 @@ export function IPManagementDashboard() {
       }
 
       await fetchIPAddresses();
-    setIsAssignDialogOpen(false);
-    setAssigningIP(null);
-    resetAssignmentForm();
+      setIsAssignDialogOpen(false);
+      setAssigningIP(null);
+      resetAssignmentForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to assign IP address");
       console.error("Error assigning IP address:", err);
@@ -794,7 +817,7 @@ export function IPManagementDashboard() {
       const response = await fetch("/api/ip-addresses/bulk-reserve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           ipAddressIds: Array.from(selectedIPIds),
           reserved: reserve,
         }),
@@ -860,10 +883,29 @@ export function IPManagementDashboard() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add IP Address
-        </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              fetchFullEquipment();
+              setIsEnhancedExportDialogOpen(true);
+            }}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Export</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEnhancedImportDialogOpen(true)}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Import</span>
+          </Button>
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add IP Address
+          </Button>
         </div>
       </div>
 
@@ -1021,30 +1063,30 @@ export function IPManagementDashboard() {
         {/* IP Addresses Tab */}
         <TabsContent value="addresses" className="space-y-4">
           <div className="flex flex-col gap-3">
-          <div className="flex items-center space-x-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search IP addresses..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+            <div className="flex items-center space-x-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search IP addresses..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="available">Available</SelectItem>
+                  <SelectItem value="assigned">Assigned</SelectItem>
+                  <SelectItem value="offline">Offline</SelectItem>
+                  <SelectItem value="reserved">Reserved</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-                <SelectItem value="reserved">Reserved</SelectItem>
-              </SelectContent>
-            </Select>
-            </div>
-            
+
             {/* Advanced Filters */}
             <AdvancedFilters
               filters={[
@@ -1102,114 +1144,17 @@ export function IPManagementDashboard() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      <BulkSelectCheckbox
-                        checked={selectedIPIds.size > 0 && selectedIPIds.size === filteredIPs.length}
-                        onCheckedChange={handleSelectAll}
-                      />
-                    </TableHead>
-                    <TableHead>IP Address</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Assigned To</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Last Seen</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredIPs.map((ip) => (
-                    <TableRow 
-                      key={ip.id}
-                      className={selectedIPIds.has(ip.id) ? "bg-muted/50" : ""}
-                    >
-                      <TableCell>
-                        <BulkSelectCheckbox
-                          checked={selectedIPIds.has(ip.id)}
-                          onCheckedChange={() => handleSelectIP(ip.id)}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">{ip.address}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(ip.status)}
-                          {getStatusBadge(ip.status)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {ip.assignedTo ? (
-                          <div>
-                            <div className="font-medium">{ip.assignedTo}</div>
-                            <div className="text-sm text-muted-foreground">{ip.equipmentType}</div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Not assigned</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {ip.location ? (
-                          <div className="flex items-center space-x-1">
-                            <MapPin className="h-3 w-3" />
-                            <span>{ip.location}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {ip.lastSeen ? (
-                          <div className="flex items-center space-x-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{ip.lastSeen instanceof Date ? ip.lastSeen.toLocaleDateString() : new Date(ip.lastSeen).toLocaleDateString()}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Never</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          {(ip.status === "AVAILABLE" || ip.status === "RESERVED") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleAssignIP(ip)}
-                              disabled={submitting}
-                            >
-                              Assign
-                            </Button>
-                          )}
-                          {ip.status === "ASSIGNED" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleUnassignIP(ip)}
-                              disabled={submitting}
-                            >
-                              Unassign
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleEditIP(ip)}
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDeleteIP(ip.id, ip.address)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                <CategorizedIPList
+                  ipAddresses={filteredIPs as any[]}
+                  onAssign={handleAssignIP as any}
+                  onUnassign={handleUnassignIP as any}
+                  onEdit={handleEditIP as any}
+                  onDelete={handleDeleteIP}
+                  selectedIds={selectedIPIds}
+                  onSelect={handleSelectIP}
+                  onSelectAll={handleSelectAll}
+                  isAllSelected={selectedIPIds.size > 0 && selectedIPIds.size === filteredIPs.length}
+                />
               )}
             </CardContent>
           </Card>
@@ -1252,10 +1197,10 @@ export function IPManagementDashboard() {
                       </TableCell>
                       <TableCell>
                         {assignment.location ? (
-                        <div className="flex items-center space-x-1">
-                          <MapPin className="h-3 w-3" />
-                          <span>{assignment.location}</span>
-                        </div>
+                          <div className="flex items-center space-x-1">
+                            <MapPin className="h-3 w-3" />
+                            <span>{assignment.location}</span>
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
@@ -1329,8 +1274,8 @@ export function IPManagementDashboard() {
                       <TableCell>
                         <Badge variant={
                           conflict.severity === "critical" ? "destructive" :
-                          conflict.severity === "high" ? "destructive" :
-                          conflict.severity === "medium" ? "secondary" : "outline"
+                            conflict.severity === "high" ? "destructive" :
+                              conflict.severity === "medium" ? "secondary" : "outline"
                         }>
                           {conflict.severity}
                         </Badge>
@@ -1392,8 +1337,8 @@ export function IPManagementDashboard() {
                       <TableCell>
                         <Badge variant={
                           log.action === "assigned" ? "default" :
-                          log.action === "unassigned" ? "secondary" :
-                          log.action === "conflict_detected" ? "destructive" : "outline"
+                            log.action === "unassigned" ? "secondary" :
+                              log.action === "conflict_detected" ? "destructive" : "outline"
                         }>
                           {log.action.replace('_', ' ')}
                         </Badge>
@@ -1435,46 +1380,46 @@ export function IPManagementDashboard() {
               Add a new IP address to the network pool
             </DialogDescription>
           </DialogHeader>
-          
+
           <TooltipProvider>
             <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
-            {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+              {error && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            
+              )}
+
               {/* Network Configuration Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Network className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-base">Network Configuration</h3>
-              </div>
-              
+                </div>
+
                 <div className="space-y-2">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Label htmlFor="address" className="cursor-help">
                         IP Address <span className="text-red-500">*</span>
-                  </Label>
+                      </Label>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Enter a valid IPv4 address</p>
                       <p className="text-xs mt-1">Format: xxx.xxx.xxx.xxx</p>
                     </TooltipContent>
                   </Tooltip>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder="192.168.1.10"
                     className="font-mono"
                     required
-                />
-              </div>
+                  />
+                </div>
 
                 {isIPManagementFormFeatureEnabled("showSubnetField") && (
                   <div className="space-y-2">
@@ -1482,20 +1427,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="subnet" className="cursor-help">
                           Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the network subnet in CIDR notation</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="subnet"
-                  value={formData.subnet}
-                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                    <Input
+                      id="subnet"
+                      value={formData.subnet}
+                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
                       placeholder="192.168.1.0/24"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showGatewayField") && (
@@ -1504,20 +1449,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="gateway" className="cursor-help">
                           Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the default gateway address</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="gateway"
-                  value={formData.gateway}
-                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                    <Input
+                      id="gateway"
+                      value={formData.gateway}
+                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
                       placeholder="192.168.1.1"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showDNSField") && (
@@ -1526,57 +1471,57 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="dns" className="cursor-help">
                           DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter comma-separated DNS server addresses</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="dns"
-                  value={formData.dns}
-                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                    <Input
+                      id="dns"
+                      value={formData.dns}
+                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
                       placeholder="8.8.8.8, 8.8.4.4"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
-            </div>
+              </div>
 
               {isIPManagementFormFeatureEnabled("showNotesField") && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <FileText className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-base">Additional Information</h3>
-              </div>
-              
+                  </div>
+
                   <div className="space-y-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Label htmlFor="notes" className="cursor-help">
                           Notes
-                </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Add any additional notes or information</p>
                       </TooltipContent>
                     </Tooltip>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       placeholder="Additional notes..."
                       rows={3}
-              />
-            </div>
-          </div>
+                    />
+                  </div>
+                </div>
               )}
-          </div>
+            </div>
           </TooltipProvider>
 
           <DialogFooter className="gap-2 pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setIsAddDialogOpen(false);
                 resetForm();
@@ -1612,40 +1557,40 @@ export function IPManagementDashboard() {
               Update IP address configuration
             </DialogDescription>
           </DialogHeader>
-          
+
           <TooltipProvider>
             <div className="space-y-6 py-4" style={{ paddingRight: '4px' }}>
-            {error && (
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+              {error && (
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700 dark:text-red-300 font-medium">{error}</p>
+                  </div>
                 </div>
-              </div>
-            )}
-            
+              )}
+
               {/* Network Configuration Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b">
                   <Network className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-base">Network Configuration</h3>
-              </div>
-              
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="edit-address">
                     IP Address
                   </Label>
-                <Input
-                  id="edit-address"
-                  value={formData.address}
+                  <Input
+                    id="edit-address"
+                    value={formData.address}
                     disabled
                     className="font-mono bg-muted/50 cursor-not-allowed"
-                />
+                  />
                   <p className="text-xs text-amber-600 dark:text-amber-500 font-medium flex items-center gap-1">
                     <Lock className="h-3 w-3" />
                     IP address cannot be modified
                   </p>
-              </div>
+                </div>
 
                 {isIPManagementFormFeatureEnabled("showSubnetField") && (
                   <div className="space-y-2">
@@ -1653,20 +1598,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-subnet" className="cursor-help">
                           Subnet Mask {isIPManagementFormFeatureEnabled("requireSubnet") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the network subnet in CIDR notation</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="edit-subnet"
-                  value={formData.subnet}
-                  onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
+                    <Input
+                      id="edit-subnet"
+                      value={formData.subnet}
+                      onChange={(e) => setFormData({ ...formData, subnet: e.target.value })}
                       placeholder="192.168.1.0/24"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showGatewayField") && (
@@ -1675,20 +1620,20 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-gateway" className="cursor-help">
                           Gateway {isIPManagementFormFeatureEnabled("requireGateway") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter the default gateway address</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="edit-gateway"
-                  value={formData.gateway}
-                  onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
+                    <Input
+                      id="edit-gateway"
+                      value={formData.gateway}
+                      onChange={(e) => setFormData({ ...formData, gateway: e.target.value })}
                       placeholder="192.168.1.1"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
 
                 {isIPManagementFormFeatureEnabled("showDNSField") && (
@@ -1697,57 +1642,57 @@ export function IPManagementDashboard() {
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-dns" className="cursor-help">
                           DNS Servers {isIPManagementFormFeatureEnabled("requireDNS") && <span className="text-red-500">*</span>}
-                  </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Enter comma-separated DNS server addresses</p>
                       </TooltipContent>
                     </Tooltip>
-                <Input
-                  id="edit-dns"
-                  value={formData.dns}
-                  onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
+                    <Input
+                      id="edit-dns"
+                      value={formData.dns}
+                      onChange={(e) => setFormData({ ...formData, dns: e.target.value })}
                       placeholder="8.8.8.8, 8.8.4.4"
                       className="font-mono"
-                />
-              </div>
+                    />
+                  </div>
                 )}
-            </div>
+              </div>
 
               {isIPManagementFormFeatureEnabled("showNotesField") && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b">
                     <FileText className="h-5 w-5 text-primary" />
                     <h3 className="font-semibold text-base">Additional Information</h3>
-              </div>
-              
+                  </div>
+
                   <div className="space-y-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Label htmlFor="edit-notes" className="cursor-help">
                           Notes
-                </Label>
+                        </Label>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Add any additional notes or information</p>
                       </TooltipContent>
                     </Tooltip>
-              <Textarea
-                id="edit-notes"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    <Textarea
+                      id="edit-notes"
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                       placeholder="Additional notes..."
                       rows={3}
-              />
-            </div>
-          </div>
+                    />
+                  </div>
+                </div>
               )}
-          </div>
+            </div>
           </TooltipProvider>
 
           <DialogFooter className="gap-2 pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setIsEditDialogOpen(false);
                 setEditingIP(null);
@@ -1870,6 +1815,24 @@ export function IPManagementDashboard() {
         variant="warning"
         isLoading={bulkActionLoading}
         warningMessage="These IP addresses will be marked as reserved and cannot be automatically assigned."
+      />
+      {/* Enhanced Import Dialog */}
+      <EnhancedImportDialog
+        isOpen={isEnhancedImportDialogOpen}
+        onClose={() => setIsEnhancedImportDialogOpen(false)}
+        onSuccess={() => {
+          fetchIPAddresses();
+          fetchConflicts();
+          fetchAuditLogs();
+          fetchEquipment();
+        }}
+      />
+
+      {/* Enhanced Export Dialog */}
+      <EnhancedExportDialog
+        isOpen={isEnhancedExportDialogOpen}
+        onClose={() => setIsEnhancedExportDialogOpen(false)}
+        equipment={fullEquipmentList}
       />
     </div>
   );

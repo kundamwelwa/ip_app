@@ -72,8 +72,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EnhancedImportDialog } from "../import-export/enhanced-import-dialog";
-import { EnhancedExportDialog } from "../import-export/enhanced-export-dialog";
+
 import { IPAddressTagInput } from "./ip-address-tag-input";
 import { MiningEquipment, EquipmentFormData, IPAddressInput } from "@/types/equipment";
 import { useEquipmentMonitoring } from "@/hooks/use-equipment-monitoring";
@@ -97,8 +96,7 @@ export function MiningEquipmentDashboard() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isEnhancedImportDialogOpen, setIsEnhancedImportDialogOpen] = useState(false);
-  const [isEnhancedExportDialogOpen, setIsEnhancedExportDialogOpen] = useState(false);
+
   const [editingEquipment, setEditingEquipment] = useState<MiningEquipment | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -183,8 +181,8 @@ export function MiningEquipmentDashboard() {
     try {
       setError(null);
       // Fetch ALL equipment by using a high limit
-      const url = useRealTime 
-        ? "/api/equipment?realTime=true&limit=10000" 
+      const url = useRealTime
+        ? "/api/equipment?realTime=true&limit=10000"
         : "/api/equipment?limit=10000";
       const response = await fetch(url);
       if (!response.ok) {
@@ -498,10 +496,10 @@ export function MiningEquipmentDashboard() {
 
       const equipmentName = deleteConfirmation.equipmentName;
       setDeleteConfirmation({ isOpen: false, equipmentId: null, equipmentName: null });
-      
+
       // Refresh equipment data from server to ensure UI is in sync
       await fetchEquipmentData();
-      
+
       showToast(`Equipment "${equipmentName}" deleted successfully!`, "success");
     } catch (error) {
       console.error("Failed to delete equipment:", error);
@@ -510,9 +508,7 @@ export function MiningEquipmentDashboard() {
     }
   };
 
-  const handleImportEquipment = (newEquipment: MiningEquipment[]) => {
-    setEquipment([...(equipment || []), ...newEquipment]);
-  };
+
 
   const resetForm = () => {
     setFormData({
@@ -596,11 +592,7 @@ export function MiningEquipmentDashboard() {
   };
 
   // Export selected equipment
-  const handleExportSelectedEquipment = () => {
-    const selectedEquipment = equipment.filter(eq => selectedEquipmentIds.has(eq.id));
-    exportSelectedEquipment(selectedEquipment, `selected-equipment-${new Date().toISOString().split('T')[0]}.xlsx`);
-    showToast(`Exported ${selectedEquipment.length} equipment item${selectedEquipment.length !== 1 ? 's' : ''}`, "success");
-  };
+
 
   // Get selected equipment items for confirmation dialog
   const getSelectedEquipmentItems = (): BulkConfirmationItem[] => {
@@ -711,32 +703,6 @@ export function MiningEquipmentDashboard() {
             )}
           </div>
 
-          {isEquipmentFeatureEnabled("showImportExportButtons") && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log("Export button clicked");
-                  setIsEnhancedExportDialogOpen(true);
-                }}
-              >
-                <Upload className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Export</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  console.log("Import button clicked");
-                  setIsEnhancedImportDialogOpen(true);
-                }}
-              >
-                <Download className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Import</span>
-              </Button>
-            </>
-          )}
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
@@ -1596,28 +1562,7 @@ export function MiningEquipmentDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Enhanced Import Dialog */}
-      <EnhancedImportDialog
-        isOpen={isEnhancedImportDialogOpen}
-        onClose={() => {
-          console.log("Closing enhanced import dialog");
-          setIsEnhancedImportDialogOpen(false);
-        }}
-        onSuccess={() => {
-          console.log("Import successful, refreshing equipment list");
-          fetchEquipmentData();
-        }}
-      />
 
-      {/* Enhanced Export Dialog */}
-      <EnhancedExportDialog
-        isOpen={isEnhancedExportDialogOpen}
-        onClose={() => {
-          console.log("Closing enhanced export dialog");
-          setIsEnhancedExportDialogOpen(false);
-        }}
-        equipment={equipment}
-      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmation.isOpen} onOpenChange={(open) => {
@@ -1669,43 +1614,45 @@ export function MiningEquipmentDashboard() {
       </Dialog>
 
       {/* Toast Notification */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
-          <Card className={`min-w-[300px] shadow-lg border-2 ${toast.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
+      {
+        toast && (
+          <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-5">
+            <Card className={`min-w-[300px] shadow-lg border-2 ${toast.type === "success" ? "border-green-500 bg-green-50 dark:bg-green-950/30" :
               toast.type === "error" ? "border-red-500 bg-red-50 dark:bg-red-950/30" :
                 "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
-            }`}>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start space-x-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${toast.type === "success" ? "bg-green-100 dark:bg-green-950/50" :
+              }`}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start space-x-3">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-full ${toast.type === "success" ? "bg-green-100 dark:bg-green-950/50" :
                     toast.type === "error" ? "bg-red-100 dark:bg-red-950/50" :
                       "bg-blue-100 dark:bg-blue-950/50"
-                  }`}>
-                  {toast.type === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
-                  {toast.type === "error" && <XCircle className="h-5 w-5 text-red-600" />}
-                  {toast.type === "info" && <AlertTriangle className="h-5 w-5 text-blue-600" />}
-                </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${toast.type === "success" ? "text-green-900 dark:text-green-100" :
+                    }`}>
+                    {toast.type === "success" && <CheckCircle className="h-5 w-5 text-green-600" />}
+                    {toast.type === "error" && <XCircle className="h-5 w-5 text-red-600" />}
+                    {toast.type === "info" && <AlertTriangle className="h-5 w-5 text-blue-600" />}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${toast.type === "success" ? "text-green-900 dark:text-green-100" :
                       toast.type === "error" ? "text-red-900 dark:text-red-100" :
                         "text-blue-900 dark:text-blue-100"
-                    }`}>
-                    {toast.message}
-                  </p>
+                      }`}>
+                      {toast.message}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setToast(null)}
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => setToast(null)}
-                >
-                  <XCircle className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+              </CardContent>
+            </Card>
+          </div>
+        )
+      }
 
       {/* Bulk Action Toolbar */}
       <BulkActionToolbar
@@ -1721,13 +1668,7 @@ export function MiningEquipmentDashboard() {
             variant: "destructive",
             onClick: () => setBulkDeleteDialogOpen(true),
           },
-          {
-            id: "export",
-            label: "Export Selection",
-            icon: <Download className="h-4 w-4" />,
-            variant: "outline",
-            onClick: handleExportSelectedEquipment,
-          },
+
         ]}
       />
 
@@ -1745,6 +1686,6 @@ export function MiningEquipmentDashboard() {
         warningMessage="⚠️ This action cannot be undone. All selected equipment and their IP assignments will be permanently removed from the system."
       />
 
-    </div>
+    </div >
   );
 }
