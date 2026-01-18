@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error importing equipment:", error);
     return NextResponse.json(
-      { error: "Failed to import equipment" },
+      { error: "Failed to import data" },
       { status: 500 }
     );
   }

@@ -433,10 +433,10 @@ export function EnhancedImportDialog({
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-primary" />
-            <span>Import Data</span>
+            <span>Import IP Addresses</span>
           </DialogTitle>
           <DialogDescription>
-            Import equipment and IP addresses from Excel files with smart mapping and duplicate detection
+            Import IP addresses and their assignments from Excel files
           </DialogDescription>
         </DialogHeader>
 
@@ -468,8 +468,8 @@ export function EnhancedImportDialog({
                     </h4>
                     <ul className="text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
                       <li>Automatic multi-sheet detection</li>
-                      <li>Smart mapping for equipment with multiple IP addresses</li>
-                      <li>Duplicate detection and prevention</li>
+                      <li>Smart mapping for assigned systems</li>
+                      <li>Duplicate detection and update support (Upsert)</li>
                       <li>Progress tracking with detailed messages</li>
                       <li>Supports Excel (.xlsx, .xls) formats</li>
                     </ul>
@@ -640,7 +640,7 @@ export function EnhancedImportDialog({
           {currentStep === 'preview' && (
             <Button onClick={handleImport} disabled={parsedData.length === 0}>
               <Upload className="h-4 w-4 mr-2" />
-              Import {parsedData.length} Equipment
+              Import {totalIPs} Addresses
             </Button>
           )}
 
