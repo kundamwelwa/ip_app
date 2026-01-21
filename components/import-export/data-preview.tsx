@@ -4,10 +4,10 @@ import { GroupedEquipment, DuplicateInFile } from './types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Truck, 
-  Network, 
-  AlertTriangle, 
+import {
+  Truck,
+  Network,
+  AlertTriangle,
   CheckCircle,
   Server,
   ChevronDown,
@@ -20,6 +20,29 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { getIPCategory, IPCategory } from '@/lib/ip-categories';
+
+const CATEGORY_COLORS: Record<IPCategory, string> = {
+  'Rajant Networks': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  'Modular IPs': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  'Switches': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+  'Repeaters / Router': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+  'DSS (Driver safety System)': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+  'Tyre sence': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+  'Split Camera': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300',
+  'Other': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+};
+
+function CategoryBadge({ ip }: { ip: string }) {
+  const category = getIPCategory(ip);
+  const colorClass = CATEGORY_COLORS[category] || CATEGORY_COLORS['Other'];
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${colorClass}`}>
+      {category}
+    </span>
+  );
+}
 
 interface DataPreviewProps {
   data: GroupedEquipment[];
@@ -138,7 +161,7 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
         <div className="space-y-3 pr-4">
           {data.map((equipment) => {
             const isExpanded = expandedItems.has(equipment.machineId);
-            
+
             return (
               <Card key={equipment.machineId} className="overflow-hidden">
                 <Collapsible
@@ -158,7 +181,7 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
                           <div>
                             <CardTitle className="text-base">{equipment.machineId}</CardTitle>
                             <p className="text-sm text-muted-foreground mt-0.5">
-                              {equipment.systems.length} system{equipment.systems.length !== 1 ? 's' : ''} / 
+                              {equipment.systems.length} system{equipment.systems.length !== 1 ? 's' : ''} /
                               {equipment.systems.length} IP{equipment.systems.length !== 1 ? 's' : ''}
                             </p>
                           </div>
@@ -189,25 +212,30 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
                                     </p>
                                   )}
                                 </div>
-                                
+
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                                   <div className="space-y-1">
                                     <p className="text-muted-foreground">IP Address</p>
-                                    <p className="font-mono font-medium flex items-center gap-1">
-                                      {system.ipAddress}
-                                      {duplicateIPSet.has(normalizeIP(system.ipAddress)) && (
-                                        <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-mono font-medium flex items-center gap-1">
+                                        {system.ipAddress}
+                                        {duplicateIPSet.has(normalizeIP(system.ipAddress)) && (
+                                          <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                        )}
+                                      </p>
+                                      {system.ipAddress && (
+                                        <CategoryBadge ip={system.ipAddress} />
                                       )}
-                                    </p>
+                                    </div>
                                   </div>
-                                  
+
                                   {system.subnet && (
                                     <div className="space-y-1">
                                       <p className="text-muted-foreground">Subnet</p>
                                       <p className="font-mono font-medium">{system.subnet}</p>
                                     </div>
                                   )}
-                                  
+
                                   {system.gateway && (
                                     <div className="space-y-1">
                                       <p className="text-muted-foreground">Gateway</p>

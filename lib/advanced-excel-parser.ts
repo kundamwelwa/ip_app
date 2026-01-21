@@ -171,6 +171,9 @@ export async function parseExcelSheet(
         const startRow = hasHeader ? 1 : 0;
         let currentMachineId = '';
 
+        // Capture headers for system naming
+        const headers = hasHeader && headerRow ? headerRow.map((h: any) => h?.toString().trim()) : [];
+
         for (let rowIndex = startRow; rowIndex < jsonData.length; rowIndex++) {
           const row = jsonData[rowIndex];
 
@@ -180,89 +183,77 @@ export async function parseExcelSheet(
           }
 
           const rawMachineId = getCellValue(row, columnMap.machineId);
-          const rawSystem = getCellValue(row, columnMap.system);
-          const ipAddress = getCellValue(row, columnMap.ipAddress);
-          const subnet = getCellValue(row, columnMap.subnet);
-          const gateway = getCellValue(row, columnMap.gateway);
-          const comments = getCellValue(row, columnMap.comments);
-
           // Maintain current machine ID even when cells are merged/blank
           if (rawMachineId && !isHeaderValue(rawMachineId)) {
             currentMachineId = rawMachineId;
           }
-
           const machineId = currentMachineId || rawMachineId || `EQUIPMENT_${rowIndex}`;
-          const system = rawSystem && !isHeaderValue(rawSystem) ? rawSystem : 'MAIN SYSTEM';
 
-          // Use the detected IP directly. 
-          // If the detected column logic works, we shouldn't need to scan the whole row again blindly,
-          // as that often picks up the WRONG IP (like gateway) if the main IP cell is missing/invalid.
-          // However, if the cell is strictly EMPTY, we can try to fallback, but be careful.
-          let foundIP = ipAddress;
+          const rawSystem = getCellValue(row, columnMap.system);
+          const defaultSystem = rawSystem && !isHeaderValue(rawSystem) ? rawSystem : 'MAIN SYSTEM';
 
-          // If mapped cell is empty/invalid, try finding ANY valid IP in remaining cells
-          if (!isValidIPAddress(foundIP)) {
-            for (let i = 0; i < row.length; i++) {
-              // Don't pick values from known non-IP columns (like machine ID or System if they look like IPs)
-              if (i === columnMap.machineId || i === columnMap.system) continue;
+          const subnet = getCellValue(row, columnMap.subnet);
+          const gateway = getCellValue(row, columnMap.gateway);
+          const comments = getCellValue(row, columnMap.comments);
 
-              const cellValue = row[i] ? row[i].toString().trim() : '';
-              if (isValidIPAddress(cellValue)) {
-                foundIP = cellValue;
-                break;
+          let ipsFoundInRow = 0;
+
+          // Scan ALL columns for IPs
+          row.forEach((cell: any, colIndex: number) => {
+            const cellValue = cell?.toString().trim();
+            if (isValidIPAddress(cellValue)) {
+              // Determine System Name based on column header if possible
+              let systemName = defaultSystem;
+              if (headers[colIndex] && !isHeaderValue(headers[colIndex])) {
+                // Clean up header to make it a nice system name (e.g. "DSS IP Address" -> "DSS")
+                const header = headers[colIndex];
+                if (!header.toLowerCase().includes('address') && !header.toLowerCase().includes('ip')) {
+                  systemName = header;
+                } else {
+                  // If header is just "IP Address" or "IP", try to clean it
+                  const cleaned = header.replace(/ip\s?address/i, '').replace(/ip/i, '').trim();
+                  if (cleaned && cleaned.length > 2) systemName = cleaned;
+                }
+              }
+
+              const normalizedIP = normalizeIPAddress(cellValue);
+              if (!seenIPs.has(normalizedIP)) {
+                seenIPs.add(normalizedIP);
+                ipFirstSeen.set(normalizedIP, { row: rowIndex + 1, machineId, system: systemName });
+
+                parsedData.push({
+                  machineId: machineId,
+                  system: systemName,
+                  ipAddress: cellValue,
+                  subnet: subnet || '255.255.255.0',
+                  gateway: gateway || '',
+                  comments: comments || '',
+                  rowIndex,
+                });
+                ipsFoundInRow++;
+              } else {
+                // Handle duplicate
+                const existing = duplicateMap.get(normalizedIP);
+                const occurrence = { row: rowIndex + 1, machineId, system: systemName };
+                if (existing) {
+                  existing.occurrences.push(occurrence);
+                } else {
+                  const first = ipFirstSeen.get(normalizedIP);
+                  duplicateMap.set(normalizedIP, {
+                    ipAddress: normalizedIP,
+                    occurrences: [...(first ? [first] : []), occurrence]
+                  });
+                }
               }
             }
-          }
+          });
 
-          // Validate IP address
-          if (!isValidIPAddress(foundIP)) {
+          if (ipsFoundInRow === 0 && !isHeaderValue(rawMachineId)) {
             skippedRows.push({
               rowIndex: rowIndex + 1,
-              reason: `No valid IP found (attempted: "${ipAddress}")`
-            });
-            continue;
-          }
-
-          const normalizedIP = normalizeIPAddress(foundIP);
-
-          if (seenIPs.has(normalizedIP)) {
-            const existing = duplicateMap.get(normalizedIP);
-            const occurrence = {
-              row: rowIndex + 1,
-              machineId,
-              system,
-            };
-
-            if (existing) {
-              existing.occurrences.push(occurrence);
-            } else {
-              const firstSeen = ipFirstSeen.get(normalizedIP);
-              duplicateMap.set(normalizedIP, {
-                ipAddress: normalizedIP,
-                occurrences: [
-                  ...(firstSeen ? [firstSeen] : []),
-                  occurrence,
-                ],
-              });
-            }
-          } else {
-            seenIPs.add(normalizedIP);
-            ipFirstSeen.set(normalizedIP, {
-              row: rowIndex + 1,
-              machineId,
-              system,
+              reason: `No valid IP found in any column`
             });
           }
-
-          parsedData.push({
-            machineId: machineId || `EQUIPMENT_${rowIndex}`,
-            system: system || 'MAIN SYSTEM',
-            ipAddress: foundIP,
-            subnet: subnet || '255.255.255.0',
-            gateway: gateway || '',
-            comments: comments || '',
-            rowIndex,
-          });
         }
 
         console.log('✅ Parsing Results:', {

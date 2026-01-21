@@ -20,6 +20,9 @@ import {
   AlertTriangle,
   CheckCircle,
   Download,
+  Check,
+  Circle,
+  Loader2
 } from 'lucide-react';
 import { SheetSelector } from './sheet-selector';
 import { DataPreview } from './data-preview';
@@ -53,6 +56,14 @@ interface EnhancedImportDialogProps {
 }
 
 type ImportStep = 'upload' | 'sheet-select' | 'preview' | 'importing' | 'complete';
+
+const STEPS = [
+  { id: 'upload', label: 'Upload File' },
+  { id: 'sheet-select', label: 'Select Sheet' },
+  { id: 'preview', label: 'Preview & Validate' },
+  { id: 'importing', label: 'Importing' },
+  { id: 'complete', label: 'Done' }
+];
 
 export function EnhancedImportDialog({
   isOpen,
@@ -415,14 +426,67 @@ export function EnhancedImportDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col dialog-scroll">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5 text-primary" />
-            <span>Import IP Addresses</span>
-          </DialogTitle>
-          <DialogDescription>
-            Import IP addresses and their assignments from Excel files
-          </DialogDescription>
+        <DialogHeader className="flex-shrink-0 space-y-6 pb-2">
+          <div className="space-y-1">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Upload className="h-6 w-6 text-primary" />
+              <span>Import IP Addresses</span>
+            </DialogTitle>
+            <DialogDescription>
+              Import, categorize, and update IP data from Excel files
+            </DialogDescription>
+          </div>
+
+          {/* Professional Stepper */}
+          <div className="w-full px-2">
+            <div className="relative flex items-center justify-between">
+              {/* Connecting Line */}
+              <div className="absolute top-4 left-0 w-full h-0.5 bg-muted -z-10">
+                <div
+                  className="h-full bg-primary transition-all duration-500 ease-in-out"
+                  style={{
+                    width: `${(STEPS.findIndex(s => s.id === currentStep) / (STEPS.length - 1)) * 100}%`
+                  }}
+                />
+              </div>
+
+              {STEPS.map((step, index) => {
+                const stepIdx = STEPS.findIndex(s => s.id === step.id);
+                const currentIdx = STEPS.findIndex(s => s.id === currentStep);
+                const isCompleted = currentIdx > stepIdx;
+                const isActive = currentIdx === stepIdx;
+
+                return (
+                  <div key={step.id} className="flex flex-col items-center gap-2">
+                    <div
+                      className={`
+                        relative h-8 w-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 z-10 bg-background
+                        ${(isActive || isCompleted)
+                          ? 'border-primary bg-primary text-primary-foreground shadow-md scale-110'
+                          : 'border-muted text-muted-foreground'}
+                      `}
+                    >
+                      {isCompleted ? (
+                        <Check className="h-4 w-4 stroke-[3]" />
+                      ) : isActive && step.id === 'importing' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <span className="text-xs font-bold">{index + 1}</span>
+                      )}
+                    </div>
+                    <span
+                      className={`
+                        text-[10px] uppercase tracking-wider font-bold transition-colors duration-300
+                        ${(isActive || isCompleted) ? 'text-primary' : 'text-muted-foreground'}
+                      `}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-6 pr-2">
