@@ -277,7 +277,7 @@ export function EnhancedImportDialog({
       });
 
       // Prepare for batching
-      const BATCH_SIZE = 5; // Ultra-small batch size to prevent Vercel/Database timeouts
+      const BATCH_SIZE = 50; // Optimized batch size for speed
       const batches = [];
       for (let i = 0; i < formattedData.length; i += BATCH_SIZE) {
         batches.push(formattedData.slice(i, i + BATCH_SIZE));
@@ -309,8 +309,7 @@ export function EnhancedImportDialog({
             progress: 5 + Math.round((processedCount / totalItems) * 90),
           });
 
-          // Short pause between batches to let DB connection pool recover
-          if (i > 0) await new Promise(r => setTimeout(r, 200));
+          // No delay for maximum speed
 
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout per batch
