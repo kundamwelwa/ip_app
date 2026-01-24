@@ -107,7 +107,7 @@ export function CategorizedIPList({
     };
 
     return (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
             {CATEGORY_ORDER.map((category) => {
                 const categoryIPs = groupedIPs[category] || [];
                 if (categoryIPs.length === 0) return null;
@@ -120,70 +120,60 @@ export function CategorizedIPList({
                         category={category}
                         stats={stats}
                     >
-                        <div className="rounded-md border">
+                        <div className="rounded-md border overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         {!readOnly && onSelectAll && (
-                                            <TableHead className="w-12">
-                                                {/* Only show "select all" on the first category to avoid confusion, or handle partial select all? 
-                                                     For simplicity, let's just make it a bulk select for the current view if user wants global select. 
-                                                     Actually, standard pattern is global select in toolbar, but we can put it here if requested.
-                                                     Better approach: The parent controls "isAllSelected" based on filtered list. 
-                                                     We can put a checkbox here that selects ALL in this CATEGORY? 
-                                                     Request was "bulk deletion feature", usually means checkboxes.
-                                                 */}
-                                                {/* We will just add the column space here, the global select all is usually outside or in the first header only.
-                                                     However, for consistency, let's add individual row checkboxes.
-                                                 */}
-                                            </TableHead>
+                                            <TableHead className="w-10 px-2"></TableHead>
                                         )}
-                                        <TableHead className="w-[180px]">IP Address</TableHead>
-                                        <TableHead className="w-[120px]">Status</TableHead>
+                                        <TableHead className="w-[140px]">IP Address</TableHead>
+                                        <TableHead className="w-[100px]">Status</TableHead>
                                         <TableHead>Assigned To</TableHead>
-                                        <TableHead>Location</TableHead>
-                                        <TableHead className="hidden md:table-cell">Last Seen</TableHead>
-                                        {!readOnly && <TableHead className="text-right">Actions</TableHead>}
+                                        {/* Hide less important columns on simplified grid view if needed, but keeping for now as responsive */}
+                                        <TableHead className="hidden 2xl:table-cell">Location</TableHead>
+                                        <TableHead className="hidden 2xl:table-cell">Last Seen</TableHead>
+                                        {!readOnly && <TableHead className="text-right">Action</TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {categoryIPs.sort((a, b) => a.address.localeCompare(b.address, undefined, { numeric: true })).map((ip) => (
                                         <TableRow key={ip.id} data-state={selectedIds?.has(ip.id) ? "selected" : undefined}>
                                             {!readOnly && onSelect && (
-                                                <TableCell>
+                                                <TableCell className="px-2">
                                                     <Checkbox
                                                         checked={selectedIds?.has(ip.id)}
                                                         onCheckedChange={() => onSelect(ip.id)}
                                                     />
                                                 </TableCell>
                                             )}
-                                            <TableCell className="font-mono font-medium">
+                                            <TableCell className="font-mono font-medium text-xs sm:text-sm">
                                                 {ip.address}
                                             </TableCell>
                                             <TableCell>
                                                 {getStatusBadge(ip.status)}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="max-w-[150px] truncate">
                                                 {ip.assignedTo ? (
                                                     <div>
-                                                        <div className="font-medium">{ip.assignedTo}</div>
-                                                        {ip.equipmentType && <div className="text-xs text-muted-foreground">{ip.equipmentType}</div>}
+                                                        <div className="font-medium truncate" title={ip.assignedTo}>{ip.assignedTo}</div>
+                                                        {ip.equipmentType && <div className="text-xs text-muted-foreground truncate">{ip.equipmentType}</div>}
                                                     </div>
                                                 ) : (
                                                     <span className="text-muted-foreground text-sm">-</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="hidden 2xl:table-cell">
                                                 {ip.location ? (
-                                                    <div className="flex items-center space-x-1 text-sm">
+                                                    <div className="flex items-center space-x-1 text-sm truncate">
                                                         <MapPin className="h-3 w-3 text-muted-foreground" />
-                                                        <span>{ip.location}</span>
+                                                        <span title={ip.location}>{ip.location}</span>
                                                     </div>
                                                 ) : (
                                                     <span className="text-muted-foreground">-</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="hidden md:table-cell">
+                                            <TableCell className="hidden 2xl:table-cell">
                                                 {ip.lastSeen ? (
                                                     <div className="flex items-center space-x-1 text-sm">
                                                         <Clock className="h-3 w-3 text-muted-foreground" />
@@ -197,47 +187,18 @@ export function CategorizedIPList({
                                             </TableCell>
                                             {!readOnly && (
                                                 <TableCell className="text-right">
-                                                    <div className="flex items-center justify-end space-x-2">
-                                                        {(ip.status === "AVAILABLE" || ip.status === "RESERVED") && onAssign && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                                                onClick={() => onAssign(ip)}
-                                                            >
-                                                                Assign
-                                                            </Button>
-                                                        )}
-                                                        {ip.status === "ASSIGNED" && onUnassign && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                                                                onClick={() => onUnassign(ip)}
-                                                            >
-                                                                Unassign
-                                                            </Button>
-                                                        )}
+                                                    <div className="flex items-center justify-end space-x-1">
                                                         {onEdit && (
                                                             <Button
-                                                                size="sm"
+                                                                size="icon"
                                                                 variant="ghost"
-                                                                className="h-8 w-8 p-0"
+                                                                className="h-7 w-7"
                                                                 onClick={() => onEdit(ip)}
                                                             >
-                                                                <Edit className="h-4 w-4" />
+                                                                <Edit className="h-3.5 w-3.5" />
                                                             </Button>
                                                         )}
-                                                        {onDelete && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                                onClick={() => onDelete(ip.id, ip.address)}
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        )}
+                                                        {/* Show minimal actions in grid view to save space */}
                                                     </div>
                                                 </TableCell>
                                             )}
@@ -265,20 +226,26 @@ function CollapsibleCategory({
     const [isOpen, setIsOpen] = useState(true);
 
     return (
-        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2">
-            <div className="flex items-center justify-between bg-muted/30 p-2 rounded-lg border">
+        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2 h-full flex flex-col">
+            <div className="flex items-center justify-between p-2 rounded-lg border bg-card text-card-foreground shadow-sm">
                 <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="p-0 hover:bg-transparent w-full justify-start">
-                        {isOpen ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
-                        <h3 className="text-lg font-semibold">{category}</h3>
-                        <div className="ml-4 flex items-center space-x-2">
-                            <Badge variant="secondary" className="text-xs">{stats.total} IPs</Badge>
-                            {stats.available > 0 && <Badge variant="outline" className="text-xs border-green-200 text-green-700 bg-green-50">{stats.available} Available</Badge>}
+                    <Button variant="ghost" size="sm" className="p-0 hover:bg-transparent w-full justify-start h-auto py-1">
+                        {isOpen ? <ChevronDown className="h-4 w-4 mr-2 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mr-2 text-muted-foreground" />}
+                        <div className="flex flex-col items-start text-left">
+                            <h3 className="font-semibold text-base">{category}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="secondary" className="text-[10px] px-1.5 h-5">{stats.total} IPs</Badge>
+                                {stats.available > 0 &&
+                                    <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1.5 h-5 flex items-center rounded-full border border-green-100">
+                                        {stats.available} Free
+                                    </span>
+                                }
+                            </div>
                         </div>
                     </Button>
                 </CollapsibleTrigger>
             </div>
-            <CollapsibleContent className="animate-in slide-in-from-top-2 data-[state=closed]:animate-out data-[state=closed]:slide-out-to-top-2">
+            <CollapsibleContent className="flex-1 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0">
                 {children}
             </CollapsibleContent>
         </Collapsible>
