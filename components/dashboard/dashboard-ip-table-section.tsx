@@ -13,7 +13,7 @@ export function DashboardIPTableSection() {
         const fetchIPs = async () => {
             try {
                 setLoading(true);
-                const response = await fetch("/api/ip-addresses?limit=1000");
+                const response = await fetch("/api/ip-addresses?limit=5000", { cache: "no-store" });
 
                 if (!response.ok) {
                     throw new Error("Failed to fetch IP addresses");

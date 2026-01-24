@@ -206,11 +206,11 @@ export function IPManagementDashboard() {
   const [assignments, setAssignments] = useState<IPAssignment[]>([]);
 
   // Fetch IP addresses from API
-  const fetchIPAddresses = async () => {
+  const fetchIPAddresses = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError(null);
-      const response = await fetch("/api/ip-addresses?limit=1000");
+      const response = await fetch("/api/ip-addresses?limit=5000", { cache: "no-store" });
 
       if (!response.ok) {
         throw new Error("Failed to fetch IP addresses");
@@ -250,7 +250,7 @@ export function IPManagementDashboard() {
       setError(err instanceof Error ? err.message : "An error occurred");
       console.error("Error fetching IP addresses:", err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -415,7 +415,7 @@ export function IPManagementDashboard() {
   // Real-time refresh interval (every 30 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchIPAddresses();
+      fetchIPAddresses(false);
       fetchConflicts();
     }, 30000);
 
