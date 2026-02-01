@@ -16,6 +16,7 @@ export interface ParsedEquipmentData {
   subnet: string;
   gateway: string;
   comments: string;
+  status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED';
   rowIndex: number;
 }
 
@@ -27,6 +28,7 @@ export interface GroupedEquipment {
     subnet: string;
     gateway: string;
     comments: string;
+    status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED';
   }>;
 }
 

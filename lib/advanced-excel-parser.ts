@@ -182,38 +182,43 @@ export async function parseExcelSheet(
             continue;
           }
 
-          const rawMachineId = getCellValue(row, columnMap.machineId);
-          // Maintain current machine ID even when cells are merged/blank
-          if (rawMachineId && !isHeaderValue(rawMachineId)) {
-            currentMachineId = rawMachineId;
-          }
-          const machineId = currentMachineId || rawMachineId || `EQUIPMENT_${rowIndex}`;
-
-          const rawSystem = getCellValue(row, columnMap.system);
-          const defaultSystem = rawSystem && !isHeaderValue(rawSystem) ? rawSystem : 'MAIN SYSTEM';
-
-          const subnet = getCellValue(row, columnMap.subnet);
-          const gateway = getCellValue(row, columnMap.gateway);
-          const comments = getCellValue(row, columnMap.comments);
-
           let ipsFoundInRow = 0;
 
-          // Scan ALL columns for IPs
+          // STRICT COLUMN-BASED LOGIC: Scan all columns for IPs
           row.forEach((cell: any, colIndex: number) => {
             const cellValue = cell?.toString().trim();
             if (isValidIPAddress(cellValue)) {
-              // Determine System Name based on column header if possible
-              let systemName = defaultSystem;
+              // 1. Determine System Name (Category) based on column header
+              let systemName = 'UNKNOWN';
               if (headers[colIndex] && !isHeaderValue(headers[colIndex])) {
-                // Clean up header to make it a nice system name (e.g. "DSS IP Address" -> "DSS")
                 const header = headers[colIndex];
+                // Clean up header (e.g. "DSS IP Address" -> "DSS")
                 if (!header.toLowerCase().includes('address') && !header.toLowerCase().includes('ip')) {
                   systemName = header;
                 } else {
-                  // If header is just "IP Address" or "IP", try to clean it
                   const cleaned = header.replace(/ip\s?address/i, '').replace(/ip/i, '').trim();
                   if (cleaned && cleaned.length > 2) systemName = cleaned;
+                  else if (cleaned.length === 0) systemName = 'General';
                 }
+              }
+
+              // 2. Determine Assignment based on Adjacent Cell (Right Neighbor)
+              const adjacentCellIndex = colIndex + 1;
+              const adjacentValue = row[adjacentCellIndex]?.toString().trim() || '';
+
+              let status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED' = 'AVAILABLE';
+              let machineId = '';
+              const normalizedAdjacent = adjacentValue.toLowerCase();
+
+              if (normalizedAdjacent === '' || normalizedAdjacent === '-') {
+                status = 'AVAILABLE';
+                machineId = `${systemName}_AVAILABLE_${rowIndex}`; // Placeholder
+              } else if (normalizedAdjacent.includes('reserved')) {
+                status = 'RESERVED';
+                machineId = `${systemName}_RESERVED_${rowIndex}`; // Placeholder
+              } else {
+                status = 'ASSIGNED';
+                machineId = adjacentValue; // The equipment name IS the adjacent value
               }
 
               const normalizedIP = normalizeIPAddress(cellValue);
@@ -225,9 +230,10 @@ export async function parseExcelSheet(
                   machineId: machineId,
                   system: systemName,
                   ipAddress: cellValue,
-                  subnet: subnet || '255.255.255.0',
-                  gateway: gateway || '',
-                  comments: comments || '',
+                  subnet: '255.255.255.0', // Default, unless we scan specific subnet columns (omitted for strict logic)
+                  gateway: '',             // Default
+                  comments: '',            // Default
+                  status: status,
                   rowIndex,
                 });
                 ipsFoundInRow++;
@@ -248,11 +254,9 @@ export async function parseExcelSheet(
             }
           });
 
-          if (ipsFoundInRow === 0 && !isHeaderValue(rawMachineId)) {
-            skippedRows.push({
-              rowIndex: rowIndex + 1,
-              reason: `No valid IP found in any column`
-            });
+          if (ipsFoundInRow === 0) {
+            // Optional: Log skipped row if relevant, but with this strict logic, 
+            // rows without IPs are just ignored.
           }
         }
 
@@ -260,11 +264,9 @@ export async function parseExcelSheet(
           totalParsed: parsedData.length,
           uniqueIPs: seenIPs.size,
           duplicates: duplicateMap.size,
-          skipped: skippedRows.length,
-          skippedDetails: skippedRows.slice(0, 5)
         });
 
-        // Group by machine ID
+        // Group by machine ID (For ASSIGNED only, others grouping is less relevant but structure is needed)
         const grouped = groupByMachineId(parsedData);
 
         resolve({
@@ -284,7 +286,7 @@ export async function parseExcelSheet(
 }
 
 /**
- * Detects column structure from header row with intelligent pattern matching
+ * Detects column structure - Deprecated in new strict mode but kept for header helpers
  */
 function detectColumnStructure(headerRow: any[]): {
   machineId: number;
@@ -294,123 +296,9 @@ function detectColumnStructure(headerRow: any[]): {
   gateway: number;
   comments: number;
 } {
-  const columnMap = {
-    machineId: -1,
-    system: -1,
-    ipAddress: -1,
-    subnet: -1,
-    gateway: -1,
-    comments: -1,
-  };
-
-  // If header row looks like data (contains IP addresses), try to detect from first few data rows
-  const hasIPInHeader = headerRow.some((cell: any) => {
-    const str = cell?.toString().trim() || '';
-    return isValidIPAddress(str);
-  });
-
-  // If no clear headers, try to infer from data structure
-  if (hasIPInHeader || headerRow.every((cell: any) => !cell || cell.toString().trim() === '')) {
-    // Try common column positions based on typical Excel layouts
-    // Often: Machine ID (col 0), System (col 1), IP (col 2), Subnet (col 3), Gateway (col 4), Comments (col 5)
-    columnMap.machineId = 0;
-    columnMap.system = 1;
-    columnMap.ipAddress = 2;
-    columnMap.subnet = 3;
-    columnMap.gateway = 4;
-    columnMap.comments = 5;
-    return columnMap;
+  return {
+    machineId: -1, system: -1, ipAddress: -1, subnet: -1, gateway: -1, comments: -1
   }
-
-  headerRow.forEach((header, index) => {
-    if (!header) return;
-
-    const headerStr = header.toString().toLowerCase().trim().replace(/[_\s-]/g, '');
-
-    // Machine ID detection (more flexible patterns)
-    if (
-      columnMap.machineId === -1 && (
-        headerStr.includes('machineid') ||
-        headerStr.includes('equipmentid') ||
-        (headerStr.includes('machine') && headerStr.includes('id')) ||
-        headerStr === 'id' ||
-        headerStr === 'machine' ||
-        headerStr.includes('equipment') ||
-        headerStr.includes('unit') ||
-        headerStr.includes('asset')
-      )
-    ) {
-      columnMap.machineId = index;
-    }
-
-    // System detection (more flexible patterns)
-    if (
-      columnMap.system === -1 && (
-        headerStr.includes('system') ||
-        headerStr.includes('component') ||
-        headerStr.includes('device') ||
-        headerStr.includes('name') ||
-        headerStr.includes('description') ||
-        headerStr.includes('type')
-      )
-    ) {
-      columnMap.system = index;
-    }
-
-    // IP Address detection (more flexible patterns - prioritize exact matches)
-    if (
-      columnMap.ipAddress === -1 && (
-        headerStr === 'ip' ||
-        headerStr === 'ipaddress' ||
-        headerStr.includes('ipaddress') ||
-        (headerStr.includes('ip') && !headerStr.includes('equipment')) ||
-        headerStr === 'address' ||
-        (headerStr.includes('address') && !headerStr.includes('mac'))
-      )
-    ) {
-      columnMap.ipAddress = index;
-    }
-
-    // Subnet detection (more flexible)
-    if (
-      headerStr.includes('subnet') ||
-      headerStr.includes('mask') ||
-      headerStr.includes('netmask')
-    ) {
-      columnMap.subnet = index;
-    }
-
-    // Gateway detection (more flexible)
-    if (
-      headerStr.includes('gateway') ||
-      headerStr.includes('router') ||
-      headerStr.includes('gw')
-    ) {
-      columnMap.gateway = index;
-    }
-
-    // Comments detection (more flexible)
-    if (
-      headerStr.includes('comment') ||
-      headerStr.includes('note') ||
-      headerStr.includes('description') ||
-      headerStr.includes('remark') ||
-      headerStr.includes('memo')
-    ) {
-      columnMap.comments = index;
-    }
-  });
-
-  // Fallback: If columns not detected, use positional mapping
-  // Assuming order: MACHINE_ID | SYSTEM | IP_ADDRESS | SUBNET | GATEWAY | COMMENTS
-  if (columnMap.machineId === -1) columnMap.machineId = 0;
-  if (columnMap.system === -1) columnMap.system = 1;
-  if (columnMap.ipAddress === -1) columnMap.ipAddress = 2;
-  if (columnMap.subnet === -1) columnMap.subnet = 3;
-  if (columnMap.gateway === -1) columnMap.gateway = 4;
-  if (columnMap.comments === -1) columnMap.comments = 5;
-
-  return columnMap;
 }
 
 /**
@@ -427,8 +315,8 @@ function getCellValue(row: any[], columnIndex: number): string {
 function isHeaderValue(value: string): boolean {
   if (!value) return false;
   const normalized = value.toLowerCase().trim();
-  const headerTerms = ['machine id', 'machine', 'system', 'ip address', 'subnet', 'gateway', 'comments'];
-  return headerTerms.includes(normalized);
+  const headerTerms = ['machine id', 'machine', 'system', 'ip address', 'subnet', 'gateway', 'comments', 'device'];
+  return headerTerms.some(term => normalized === term || normalized.includes('ip address'));
 }
 
 function normalizeIPAddress(ip: string): string {
@@ -445,19 +333,24 @@ function groupByMachineId(data: ParsedEquipmentData[]): GroupedEquipment[] {
   const grouped = new Map<string, GroupedEquipment>();
 
   data.forEach((item) => {
-    if (!grouped.has(item.machineId)) {
-      grouped.set(item.machineId, {
+    // Only group ASSIGNED items by their Machine ID.
+    // For AVAILABLE and RESERVED, we treat them as individual items (grouped by their unique placeholder ID).
+    const key = item.machineId;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
         machineId: item.machineId,
         systems: [],
       });
     }
 
-    grouped.get(item.machineId)!.systems.push({
+    grouped.get(key)!.systems.push({
       system: item.system,
       ipAddress: item.ipAddress,
       subnet: item.subnet,
       gateway: item.gateway,
       comments: item.comments,
+      status: item.status,
     });
   });
 

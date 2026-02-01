@@ -254,6 +254,7 @@ export function EnhancedImportDialog({
           gateway: system.gateway || null,
           dns: null,
           notes: system.comments || null,
+          status: system.status,
         }));
 
         const allComments = equipment.systems
