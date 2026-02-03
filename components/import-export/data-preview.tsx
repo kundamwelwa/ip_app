@@ -61,12 +61,12 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
     return parts.map((part) => String(Number(part))).join('.');
   };
 
-  const toggleItem = (machineId: string) => {
+  const toggleItem = (groupKey: string) => {
     const newExpanded = new Set(expandedItems);
-    if (newExpanded.has(machineId)) {
-      newExpanded.delete(machineId);
+    if (newExpanded.has(groupKey)) {
+      newExpanded.delete(groupKey);
     } else {
-      newExpanded.add(machineId);
+      newExpanded.add(groupKey);
     }
     setExpandedItems(newExpanded);
   };
@@ -75,7 +75,7 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
     if (expandedItems.size === data.length) {
       setExpandedItems(new Set());
     } else {
-      setExpandedItems(new Set(data.map(item => item.machineId)));
+      setExpandedItems(new Set(data.map(item => item.groupKey)));
     }
   };
 
@@ -160,13 +160,13 @@ export function DataPreview({ data, duplicateIPs, totalIPs }: DataPreviewProps) 
       <ScrollArea className="h-[400px] rounded-lg border p-4 space-y-3">
         <div className="space-y-3 pr-4">
           {data.map((equipment) => {
-            const isExpanded = expandedItems.has(equipment.machineId);
+            const isExpanded = expandedItems.has(equipment.groupKey);
 
             return (
-              <Card key={equipment.machineId} className="overflow-hidden">
+              <Card key={equipment.groupKey} className="overflow-hidden">
                 <Collapsible
                   open={isExpanded}
-                  onOpenChange={() => toggleItem(equipment.machineId)}
+                  onOpenChange={() => toggleItem(equipment.groupKey)}
                 >
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors p-4">

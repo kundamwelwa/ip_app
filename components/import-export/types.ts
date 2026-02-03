@@ -21,6 +21,7 @@ export interface ParsedEquipmentData {
 }
 
 export interface GroupedEquipment {
+  groupKey: string;
   machineId: string;
   systems: Array<{
     system: string;

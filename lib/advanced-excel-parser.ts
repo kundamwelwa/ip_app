@@ -12,6 +12,10 @@ import {
   DuplicateInFile,
 } from '@/components/import-export/types';
 
+type CellValue = string | number | boolean | Date | null | undefined;
+type RowValue = CellValue[];
+type SheetData = RowValue[];
+
 /**
  * Validates IP address format
  */
@@ -93,7 +97,7 @@ export async function parseExcelSheet(
           header: 1,
           defval: '',
           blankrows: false
-        }) as any[][];
+        }) as SheetData;
 
         console.log('📊 Excel Parse Debug:', {
           sheetName: targetSheet,
@@ -113,7 +117,7 @@ export async function parseExcelSheet(
         }
 
         // Detect column structure
-        const headerRow = jsonData[0];
+        const headerRow = jsonData[0] ?? [];
         const initialColumnMap = detectColumnStructure(headerRow);
         const hasHeader = Object.values(initialColumnMap).some(idx => idx !== -1);
 
@@ -123,9 +127,9 @@ export async function parseExcelSheet(
         const ipColumnStats = new Map<number, Set<string>>();
         const dataRowsToCheck = jsonData.slice(hasHeader ? 1 : 0, Math.min(jsonData.length, 100)); // Check first 100 rows
 
-        dataRowsToCheck.forEach(row => {
-          row.forEach((cell: any, index: number) => {
-            const val = cell?.toString().trim();
+        dataRowsToCheck.forEach((row) => {
+          row.forEach((cell, index) => {
+            const val = toStringValue(cell).trim();
             if (isValidIPAddress(val)) {
               if (!ipColumnStats.has(index)) {
                 ipColumnStats.set(index, new Set());
@@ -166,27 +170,24 @@ export async function parseExcelSheet(
         const seenIPs = new Set<string>();
         const ipFirstSeen = new Map<string, { row: number; machineId: string; system: string }>();
         const duplicateMap = new Map<string, DuplicateInFile>();
-        const skippedRows: { rowIndex: number; reason: string }[] = [];
-
         const startRow = hasHeader ? 1 : 0;
-        let currentMachineId = '';
 
         // Capture headers for system naming
-        const headers = hasHeader && headerRow ? headerRow.map((h: any) => h?.toString().trim()) : [];
+        const headers = hasHeader && headerRow ? headerRow.map((h) => toStringValue(h).trim()) : [];
 
         for (let rowIndex = startRow; rowIndex < jsonData.length; rowIndex++) {
           const row = jsonData[rowIndex];
 
           // Skip empty rows
-          if (!row || row.every((cell: any) => !cell || cell.toString().trim() === '')) {
+          if (!row || row.every((cell) => toStringValue(cell).trim() === '')) {
             continue;
           }
 
           let ipsFoundInRow = 0;
 
           // STRICT COLUMN-BASED LOGIC: Scan all columns for IPs
-          row.forEach((cell: any, colIndex: number) => {
-            const cellValue = cell?.toString().trim();
+          row.forEach((cell, colIndex) => {
+            const cellValue = toStringValue(cell).trim();
             if (isValidIPAddress(cellValue)) {
               // 1. Determine System Name (Category) based on column header
               let systemName = 'UNKNOWN';
@@ -204,21 +205,21 @@ export async function parseExcelSheet(
 
               // 2. Determine Assignment based on Adjacent Cell (Right Neighbor)
               const adjacentCellIndex = colIndex + 1;
-              const adjacentValue = row[adjacentCellIndex]?.toString().trim() || '';
+              const adjacentRaw = row[adjacentCellIndex];
+              const adjacentValue =
+                adjacentRaw === null || adjacentRaw === undefined ? '' : adjacentRaw.toString();
+              const adjacentTrimmed = adjacentValue.trim();
 
-              let status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED' = 'AVAILABLE';
-              let machineId = '';
-              const normalizedAdjacent = adjacentValue.toLowerCase();
+              let status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED' = 'ASSIGNED';
+              const machineId = adjacentValue; // Preserve exactly as written (no placeholders)
+              const normalizedAdjacent = adjacentTrimmed.toLowerCase();
 
-              if (normalizedAdjacent === '' || normalizedAdjacent === '-') {
-                status = 'AVAILABLE';
-                machineId = `${systemName}_AVAILABLE_${rowIndex}`; // Placeholder
+              if (adjacentTrimmed === '' || adjacentTrimmed === '-') {
+                status = 'RESERVED';
               } else if (normalizedAdjacent.includes('reserved')) {
                 status = 'RESERVED';
-                machineId = `${systemName}_RESERVED_${rowIndex}`; // Placeholder
               } else {
                 status = 'ASSIGNED';
-                machineId = adjacentValue; // The equipment name IS the adjacent value
               }
 
               const normalizedIP = normalizeIPAddress(cellValue);
@@ -288,7 +289,7 @@ export async function parseExcelSheet(
 /**
  * Detects column structure - Deprecated in new strict mode but kept for header helpers
  */
-function detectColumnStructure(headerRow: any[]): {
+function detectColumnStructure(headerRow: RowValue): {
   machineId: number;
   system: number;
   ipAddress: number;
@@ -296,17 +297,10 @@ function detectColumnStructure(headerRow: any[]): {
   gateway: number;
   comments: number;
 } {
+  void headerRow;
   return {
     machineId: -1, system: -1, ipAddress: -1, subnet: -1, gateway: -1, comments: -1
   }
-}
-
-/**
- * Gets cell value safely
- */
-function getCellValue(row: any[], columnIndex: number): string {
-  if (columnIndex === -1 || !row[columnIndex]) return '';
-  return row[columnIndex].toString().trim();
 }
 
 /**
@@ -326,6 +320,11 @@ function normalizeIPAddress(ip: string): string {
   return parts.map((part) => String(Number(part))).join('.');
 }
 
+function toStringValue(value: CellValue): string {
+  if (value === null || value === undefined) return '';
+  return value.toString();
+}
+
 /**
  * Groups parsed data by machine ID
  */
@@ -333,18 +332,21 @@ function groupByMachineId(data: ParsedEquipmentData[]): GroupedEquipment[] {
   const grouped = new Map<string, GroupedEquipment>();
 
   data.forEach((item) => {
-    // Only group ASSIGNED items by their Machine ID.
-    // For AVAILABLE and RESERVED, we treat them as individual items (grouped by their unique placeholder ID).
-    const key = item.machineId;
+    const normalizedIP = normalizeIPAddress(item.ipAddress);
+    const isAssigned = item.status === 'ASSIGNED';
+    const groupKey = isAssigned
+      ? `assigned:${item.machineId}`
+      : `unassigned:${normalizedIP}`;
 
-    if (!grouped.has(key)) {
-      grouped.set(key, {
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, {
+        groupKey,
         machineId: item.machineId,
         systems: [],
       });
     }
 
-    grouped.get(key)!.systems.push({
+    grouped.get(groupKey)!.systems.push({
       system: item.system,
       ipAddress: item.ipAddress,
       subnet: item.subnet,
