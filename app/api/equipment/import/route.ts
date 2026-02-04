@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
                     },
                     data: {
                       isActive: false,
-                      endedAt: new Date()
+                      releasedAt: new Date()
                     }
                   });
                 }
