@@ -9,20 +9,14 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
+ 
 import {
     getIPCategory,
     CATEGORY_ORDER,
     IPCategory,
 } from "@/lib/ip-categories";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, MapPin, Clock, CheckCircle } from "lucide-react";
+import { Edit, Trash2, MapPin, Clock } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronRight } from "lucide-react";
@@ -42,17 +36,15 @@ export interface IPAddressItem {
     dns?: string | null;
     isReserved?: boolean;
     notes?: string | null;
-    createdAt?: Date;
-    updatedAt?: Date;
-    [key: string]: any; // Allow other properties
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    [key: string]: unknown; // Allow other properties
 }
 
 interface CategorizedIPListProps {
     ipAddresses: IPAddressItem[];
-    onAssign?: (ip: IPAddressItem) => void;
-    onUnassign?: (ip: IPAddressItem) => void;
     onEdit?: (ip: IPAddressItem) => void;
-    onDelete?: (id: string, address: string) => void;
+    onDeleteCategory?: (category: IPCategory, ips: IPAddressItem[]) => void;
     readOnly?: boolean;
     // Selection props
     selectedIds?: Set<string>;
@@ -63,15 +55,12 @@ interface CategorizedIPListProps {
 
 export function CategorizedIPList({
     ipAddresses,
-    onAssign,
-    onUnassign,
     onEdit,
-    onDelete,
+    onDeleteCategory,
     readOnly = false,
     selectedIds,
     onSelect,
     onSelectAll,
-    isAllSelected,
 }: CategorizedIPListProps) {
     // Group IPs
     const groupedIPs = ipAddresses.reduce((acc, ip) => {
@@ -119,6 +108,8 @@ export function CategorizedIPList({
                         key={category}
                         category={category}
                         stats={stats}
+                        onDeleteCategory={onDeleteCategory ? () => onDeleteCategory(category, categoryIPs) : undefined}
+                        deleteCount={categoryIPs.length}
                     >
                         <div className="rounded-md border overflow-x-auto">
                             <Table>
@@ -217,11 +208,15 @@ export function CategorizedIPList({
 function CollapsibleCategory({
     category,
     stats,
-    children
+    children,
+    onDeleteCategory,
+    deleteCount,
 }: {
-    category: string,
+    category: IPCategory,
     stats: { total: number, assigned: number, available: number },
-    children: React.ReactNode
+    children: React.ReactNode,
+    onDeleteCategory?: () => void,
+    deleteCount?: number,
 }) {
     const [isOpen, setIsOpen] = useState(true);
 
@@ -244,6 +239,20 @@ function CollapsibleCategory({
                         </div>
                     </Button>
                 </CollapsibleTrigger>
+                {onDeleteCategory && (deleteCount || 0) > 0 && (
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteCategory();
+                        }}
+                        className="ml-2 h-8"
+                    >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        Delete
+                    </Button>
+                )}
             </div>
             <CollapsibleContent className="flex-1 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0">
                 {children}

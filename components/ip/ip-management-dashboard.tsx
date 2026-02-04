@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Loader2,
   RefreshCw,
@@ -22,10 +22,6 @@ import {
   WifiOff,
   Shield,
   Server,
-  TrendingUp,
-  TrendingDown,
-  AlertCircle,
-  Filter,
   Download,
   Upload,
 } from "lucide-react";
@@ -61,6 +57,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { CategorizedIPList } from "@/components/ip/categorized-ip-list";
+import type { IPAddressItem } from "@/components/ip/categorized-ip-list";
 import { EquipmentSelectionDialog } from "@/components/ip/equipment-selection-dialog";
 import { EnhancedImportDialog } from "@/components/import-export/enhanced-import-dialog";
 import { EnhancedExportDialog } from "@/components/import-export/enhanced-export-dialog";
@@ -76,13 +73,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BulkActionToolbar, BulkSelectCheckbox } from "@/components/ui/bulk-action-toolbar";
+import { BulkActionToolbar } from "@/components/ui/bulk-action-toolbar";
 import { BulkConfirmationDialog, BulkConfirmationItem } from "@/components/ui/bulk-confirmation-dialog";
 import { exportSelectedIPs } from "@/lib/export-utils";
-import { AdvancedFilters, ActiveFilter, FilterOption, useAdvancedFilters } from "@/components/ui/advanced-filters";
+import { AdvancedFilters, ActiveFilter } from "@/components/ui/advanced-filters";
+import type { IPCategory } from "@/lib/ip-categories";
 
 // Types
-interface IPAddress {
+interface IPAddress extends IPAddressItem {
   id: string;
   address: string;
   subnet: string;
@@ -96,12 +94,12 @@ interface IPAddress {
   equipmentType?: string;
   location?: string;
   assignedBy?: string;
-  assignedAt?: string | Date;
-  lastSeen?: string | Date;
+  assignedAt?: Date;
+  lastSeen?: Date;
   notes?: string | null;
   dns?: string | null;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
+  createdAt?: Date;
+  updatedAt?: Date;
   assignments?: Array<{
     id: string;
     equipment?: {
@@ -156,6 +154,56 @@ interface IPAuditLog {
   newValue?: string;
 }
 
+interface ApiIPAddressAssignment {
+  id: string;
+  equipment?: {
+    id: string;
+    name: string;
+    type: string;
+    location: string | null;
+  };
+  user?: {
+    firstName: string;
+    lastName: string;
+  };
+  assignedAt: string;
+  isActive: boolean;
+}
+
+interface ApiIPAddress {
+  id: string;
+  address: string;
+  subnet: string;
+  gateway?: string | null;
+  dns?: string | null;
+  status: string;
+  isReserved?: boolean;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignments?: ApiIPAddressAssignment[];
+  lastSeen?: string | null;
+}
+
+interface ApiConflict {
+  ipAddress: string;
+  conflictCount: number;
+  assignments: Array<{ equipmentName: string }>;
+}
+
+interface ApiAuditLog {
+  id: string;
+  action: string;
+  createdAt: string;
+  details?: {
+    ipAddress?: string;
+    equipmentName?: string;
+  };
+  ipAddress?: { address: string };
+  equipment?: { name: string };
+  user?: { firstName: string; lastName: string };
+}
+
 export function IPManagementDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
@@ -168,13 +216,20 @@ export function IPManagementDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [equipmentList, setEquipmentList] = useState<Array<{ id: string; name: string; type: string }>>([]);
-
   // Bulk selection state
   const [selectedIPIds, setSelectedIPIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkReserveDialogOpen, setBulkReserveDialogOpen] = useState(false);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkDeleteTarget, setBulkDeleteTarget] = useState<{
+    ids: string[];
+    title: string;
+    description: string;
+    confirmText: string;
+    warningMessage?: string;
+    items: BulkConfirmationItem[];
+    clearSelection?: boolean;
+  } | null>(null);
 
   // Advanced filters state
   const [advancedFilters, setAdvancedFilters] = useState<ActiveFilter[]>([]);
@@ -216,10 +271,10 @@ export function IPManagementDashboard() {
         throw new Error("Failed to fetch IP addresses");
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as { ipAddresses: ApiIPAddress[] };
 
       // Transform API data to match component format
-      const transformedIPs: IPAddress[] = data.ipAddresses.map((ip: any) => ({
+      const transformedIPs: IPAddress[] = data.ipAddresses.map((ip) => ({
         id: ip.id,
         address: ip.address,
         subnet: ip.subnet,
@@ -255,33 +310,17 @@ export function IPManagementDashboard() {
   };
 
   // Fetch equipment list for assignment
-  const fetchEquipment = async () => {
-    try {
-      const response = await fetch("/api/equipment?limit=1000");
-      if (response.ok) {
-        const data = await response.json();
-        setEquipmentList(data.equipment.map((eq: any) => ({
-          id: eq.id,
-          name: eq.name,
-          type: eq.type,
-        })));
-      }
-    } catch (err) {
-      console.error("Error fetching equipment:", err);
-    }
-  };
-
   // Fetch conflicts
   const fetchConflicts = async () => {
     try {
       const response = await fetch("/api/ip-addresses/conflicts");
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as { conflicts: ApiConflict[] };
         // Transform conflicts data
-        const transformedConflicts: IPConflict[] = data.conflicts.map((conflict: any) => ({
+        const transformedConflicts: IPConflict[] = data.conflicts.map((conflict) => ({
           id: conflict.ipAddress,
           ipAddress: conflict.ipAddress,
-          conflictingEquipment: conflict.assignments.map((a: any) => a.equipmentName),
+          conflictingEquipment: conflict.assignments.map((a) => a.equipmentName),
           detectedAt: new Date(),
           severity: conflict.conflictCount > 2 ? "high" : "medium" as "low" | "medium" | "high" | "critical",
           status: "active" as "active" | "resolved",
@@ -294,14 +333,14 @@ export function IPManagementDashboard() {
   };
 
   // Fetch audit logs
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     try {
       // Fetch from audit logs API which has proper IP-related logs
       const response = await fetch("/api/audit-logs?entityType=IP_ADDRESS&limit=50");
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as { auditLogs: ApiAuditLog[] };
         // Transform audit logs to IPAuditLog format
-        const transformedLogs: IPAuditLog[] = data.auditLogs.map((log: any) => {
+        const transformedLogs: IPAuditLog[] = data.auditLogs.map((log) => {
           // Get IP address from the included ipAddress relation or from details
           let ipAddress = "Unknown";
           if (log.ipAddress?.address) {
@@ -339,10 +378,10 @@ export function IPManagementDashboard() {
       // Fallback to empty array
       setAuditLogs([]);
     }
-  };
+  }, []);
 
   // Fetch assignments from IP assignments
-  const fetchAssignments = async () => {
+  const fetchAssignments = useCallback(async () => {
     try {
       // We'll derive assignments from IP addresses with active assignments
       const assignmentsFromIPs: IPAssignment[] = [];
@@ -372,12 +411,11 @@ export function IPManagementDashboard() {
     } catch (err) {
       console.error("Error processing assignments:", err);
     }
-  };
+  }, [ipAddresses]);
 
   // Initial data fetch
   useEffect(() => {
     fetchIPAddresses();
-    fetchEquipment();
     fetchConflicts();
   }, []);
 
@@ -402,7 +440,7 @@ export function IPManagementDashboard() {
       // Clean up URL
       window.history.replaceState({}, '', '/ip-management');
     }
-  }, []);
+  }, [showSuccess]);
 
   // Update assignments when IP addresses change
   useEffect(() => {
@@ -410,7 +448,7 @@ export function IPManagementDashboard() {
       fetchAssignments();
       fetchAuditLogs();
     }
-  }, [ipAddresses]);
+  }, [ipAddresses, fetchAssignments, fetchAuditLogs]);
 
   // Real-time refresh interval (every 30 seconds)
   useEffect(() => {
@@ -482,36 +520,6 @@ export function IPManagementDashboard() {
     return matchesSearch && matchesStatus && matchesAdvancedFilters;
   });
 
-  const getStatusIcon = (status: string) => {
-    switch (status.toUpperCase()) {
-      case "ASSIGNED":
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case "AVAILABLE":
-        return <Wifi className="h-4 w-4 text-blue-500" />;
-      case "OFFLINE":
-        return <WifiOff className="h-4 w-4 text-red-500" />;
-      case "RESERVED":
-        return <Shield className="h-4 w-4 text-yellow-500" />;
-      default:
-        return <WifiOff className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const normalizedStatus = status.toUpperCase();
-    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-      ASSIGNED: "default",
-      AVAILABLE: "secondary",
-      OFFLINE: "destructive",
-      RESERVED: "outline",
-    };
-
-    return (
-      <Badge variant={variants[normalizedStatus] || "outline"}>
-        {status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()}
-      </Badge>
-    );
-  };
 
   const handleAddIP = async () => {
     // Only require IP address
@@ -563,14 +571,35 @@ export function IPManagementDashboard() {
     }
   };
 
-  const handleEditIP = (ip: IPAddress) => {
-    setEditingIP(ip);
-    setFormData({
+  const handleEditIP = (ip: IPAddressItem) => {
+    const existing = ipAddresses.find((item) => item.id === ip.id);
+    const normalized: IPAddress = existing || {
+      id: ip.id,
       address: ip.address,
-      subnet: ip.subnet,
-      gateway: ip.gateway || "",
-      dns: typeof ip.dns === "string" ? ip.dns : (ip.dns && typeof ip.dns !== "string" ? String(ip.dns) : ""),
-      notes: ip.notes || "",
+      subnet: ip.subnet ?? "",
+      gateway: ip.gateway ?? "",
+      status: (ip.status as IPAddress["status"]) || "AVAILABLE",
+      isReserved: ip.isReserved,
+      assignedTo: ip.assignedTo,
+      equipmentType: ip.equipmentType,
+      location: ip.location,
+      lastSeen: ip.lastSeen ? new Date(ip.lastSeen) : undefined,
+      notes: ip.notes ?? null,
+      dns: ip.dns ?? null,
+      createdAt: ip.createdAt ? new Date(ip.createdAt) : undefined,
+      updatedAt: ip.updatedAt ? new Date(ip.updatedAt) : undefined,
+      assignments: [],
+    };
+
+    setEditingIP(normalized);
+    setFormData({
+      address: normalized.address,
+      subnet: normalized.subnet,
+      gateway: normalized.gateway || "",
+      dns: typeof normalized.dns === "string"
+        ? normalized.dns
+        : (normalized.dns && typeof normalized.dns !== "string" ? String(normalized.dns) : ""),
+      notes: normalized.notes || "",
     });
     setIsEditDialogOpen(true);
   };
@@ -605,7 +634,7 @@ export function IPManagementDashboard() {
             // If not JSON, use status text
             errorMessage = response.statusText || errorMessage;
           }
-        } catch (parseError) {
+        } catch {
           // If JSON parsing fails, use status text
           errorMessage = response.statusText || errorMessage;
         }
@@ -623,11 +652,6 @@ export function IPManagementDashboard() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const handleAssignIP = (ip: IPAddress) => {
-    setAssigningIP(ip);
-    setIsAssignDialogOpen(true);
   };
 
   const handleConfirmAssignment = async (equipmentId: string) => {
@@ -664,80 +688,6 @@ export function IPManagementDashboard() {
     }
   };
 
-  const handleUnassignIP = (ip: IPAddress) => {
-    if (!ip.assignments || ip.assignments.length === 0) return;
-
-    const activeAssignment = ip.assignments.find(a => a.isActive);
-    if (!activeAssignment) return;
-
-    showConfirmation({
-      title: "Unassign IP Address",
-      description: "Are you sure you want to unassign this IP address from the equipment?",
-      confirmText: "Unassign",
-      variant: "warning",
-      itemName: ip.address,
-      onConfirm: async () => {
-        try {
-          setSubmitting(true);
-          setError(null);
-
-          const response = await fetch(`/api/ip-assignments?ipAddressId=${ip.id}&equipmentId=${activeAssignment.equipment?.id}`, {
-            method: "DELETE",
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Failed to unassign IP address");
-          }
-
-          await fetchIPAddresses();
-          showSuccess(`IP address ${ip.address} unassigned successfully`);
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : "Failed to unassign IP address";
-          setError(errorMessage);
-          showError(errorMessage);
-          console.error("Error unassigning IP address:", err);
-        } finally {
-          setSubmitting(false);
-        }
-      },
-    });
-  };
-
-  const handleDeleteIP = (id: string, address: string) => {
-    showConfirmation({
-      title: "Delete IP Address",
-      description: "This IP address will be permanently removed from the system. This action cannot be undone.",
-      confirmText: "Delete IP Address",
-      variant: "danger",
-      itemName: address,
-      onConfirm: async () => {
-        try {
-          setSubmitting(true);
-          setError(null);
-
-          const response = await fetch(`/api/ip-addresses/${id}`, {
-            method: "DELETE",
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || "Failed to delete IP address");
-          }
-
-          await fetchIPAddresses();
-          showSuccess(`IP address ${address} deleted successfully`);
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : "Failed to delete IP address";
-          setError(errorMessage);
-          showError(errorMessage);
-          console.error("Error deleting IP address:", err);
-        } finally {
-          setSubmitting(false);
-        }
-      },
-    });
-  };
 
   const resetForm = () => {
     setFormData({
@@ -782,14 +732,75 @@ export function IPManagementDashboard() {
     setSelectedIPIds(new Set());
   };
 
+  const buildBulkItems = (ips: IPAddressItem[]): BulkConfirmationItem[] => {
+    return ips.map((ip) => ({
+      id: ip.id,
+      label: ip.address,
+      sublabel: ip.assignedTo || "Not assigned",
+      status: ip.status,
+    }));
+  };
+
+  const openBulkDeleteDialog = (target: {
+    ids: string[];
+    title: string;
+    description: string;
+    confirmText: string;
+    warningMessage?: string;
+    items: BulkConfirmationItem[];
+    clearSelection?: boolean;
+  }) => {
+    setBulkDeleteTarget(target);
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const handleDeleteAllSystem = () => {
+    if (ipAddresses.length === 0) {
+      showWarning("No IP addresses available to delete.");
+      return;
+    }
+
+    openBulkDeleteDialog({
+      ids: ipAddresses.map((ip) => ip.id),
+      items: buildBulkItems(ipAddresses),
+      title: "Delete All IP Addresses",
+      description: `This will permanently delete ${ipAddresses.length} IP addresses across the entire system.`,
+      confirmText: "Delete All IPs",
+      warningMessage: "This action cannot be undone. All IP addresses and their assignments will be permanently removed.",
+      clearSelection: true,
+    });
+  };
+
+  const handleDeleteCategory = (category: IPCategory, ips: IPAddressItem[]) => {
+    if (ips.length === 0) {
+      showWarning(`No IP addresses found in ${category}.`);
+      return;
+    }
+
+    openBulkDeleteDialog({
+      ids: ips.map((ip) => ip.id),
+      items: buildBulkItems(ips),
+      title: `Delete ${category} IPs`,
+      description: `This will permanently delete ${ips.length} IP address${ips.length !== 1 ? "es" : ""} from ${category}.`,
+      confirmText: "Delete Category",
+      warningMessage: "This action cannot be undone. All IP addresses in this category will be permanently removed.",
+    });
+  };
+
   // Bulk delete handler
   const handleBulkDelete = async () => {
     try {
+      if (!bulkDeleteTarget || bulkDeleteTarget.ids.length === 0) {
+        showWarning("No IP addresses selected for deletion.");
+        setBulkDeleteDialogOpen(false);
+        return;
+      }
+
       setBulkActionLoading(true);
       const response = await fetch("/api/ip-addresses/bulk-delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ipAddressIds: Array.from(selectedIPIds) }),
+        body: JSON.stringify({ ipAddressIds: bulkDeleteTarget.ids }),
       });
 
       if (!response.ok) {
@@ -800,8 +811,11 @@ export function IPManagementDashboard() {
       const result = await response.json();
       showSuccess(result.message || "IP addresses deleted successfully");
       await fetchIPAddresses();
-      setSelectedIPIds(new Set());
+      if (bulkDeleteTarget.clearSelection) {
+        setSelectedIPIds(new Set());
+      }
       setBulkDeleteDialogOpen(false);
+      setBulkDeleteTarget(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to delete IP addresses";
       showError(errorMessage);
@@ -1132,11 +1146,24 @@ export function IPManagementDashboard() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>IP Addresses</CardTitle>
-              <CardDescription>
-                Manage all IP addresses in the network
-              </CardDescription>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>IP Addresses</CardTitle>
+                <CardDescription>
+                  Manage all IP addresses in the network
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteAllSystem}
+                  disabled={ipAddresses.length === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete All IPs
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1145,11 +1172,9 @@ export function IPManagementDashboard() {
                 </div>
               ) : (
                 <CategorizedIPList
-                  ipAddresses={filteredIPs as any[]}
-                  onAssign={handleAssignIP as any}
-                  onUnassign={handleUnassignIP as any}
-                  onEdit={handleEditIP as any}
-                  onDelete={handleDeleteIP}
+                  ipAddresses={filteredIPs}
+                  onEdit={handleEditIP}
+                  onDeleteCategory={(category, ips) => handleDeleteCategory(category, ips)}
                   selectedIds={selectedIPIds}
                   onSelect={handleSelectIP}
                   onSelectAll={handleSelectAll}
@@ -1730,6 +1755,7 @@ export function IPManagementDashboard() {
         }}
         ipAddress={assigningIP?.address || ""}
         onConfirm={async (equipmentId: string, equipmentName: string) => {
+          void equipmentName;
           await handleConfirmAssignment(equipmentId);
         }}
       />
@@ -1770,7 +1796,16 @@ export function IPManagementDashboard() {
             label: "Delete Selected",
             icon: <Trash2 className="h-4 w-4" />,
             variant: "destructive",
-            onClick: () => setBulkDeleteDialogOpen(true),
+            onClick: () =>
+              openBulkDeleteDialog({
+                ids: Array.from(selectedIPIds),
+                items: getSelectedIPItems(),
+                title: "Delete Selected IPs",
+                description: "Are you sure you want to delete the selected IP addresses?",
+                confirmText: "Delete Selected",
+                warningMessage: "This action cannot be undone. All selected IP addresses will be permanently removed.",
+                clearSelection: true,
+              }),
           },
           {
             id: "reserve",
@@ -1791,13 +1826,16 @@ export function IPManagementDashboard() {
 
       {/* Bulk Delete Confirmation */}
       <BulkConfirmationDialog
-        isOpen={bulkDeleteDialogOpen}
-        onClose={() => setBulkDeleteDialogOpen(false)}
+        isOpen={bulkDeleteDialogOpen && !!bulkDeleteTarget}
+        onClose={() => {
+          setBulkDeleteDialogOpen(false);
+          setBulkDeleteTarget(null);
+        }}
         onConfirm={handleBulkDelete}
-        title="Delete IP Addresses"
-        description="Are you sure you want to delete these IP addresses?"
-        items={getSelectedIPItems()}
-        confirmText="Delete All"
+        title={bulkDeleteTarget?.title || "Delete IP Addresses"}
+        description={bulkDeleteTarget?.description || "Are you sure you want to delete these IP addresses?"}
+        items={bulkDeleteTarget?.items || []}
+        confirmText={bulkDeleteTarget?.confirmText || "Delete"}
         variant="danger"
         isLoading={bulkActionLoading}
         warningMessage="⚠️ This action cannot be undone. All selected IP addresses will be permanently removed from the system."
@@ -1824,7 +1862,6 @@ export function IPManagementDashboard() {
           fetchIPAddresses();
           fetchConflicts();
           fetchAuditLogs();
-          fetchEquipment();
         }}
       />
 

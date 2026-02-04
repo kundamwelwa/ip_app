@@ -16,6 +16,20 @@ type CellValue = string | number | boolean | Date | null | undefined;
 type RowValue = CellValue[];
 type SheetData = RowValue[];
 
+const RESERVED_KEYWORDS = [
+  'reserved',
+  'not in use',
+  'not in-use',
+  'not-in-use',
+  'unused',
+  'available',
+  'spare',
+  'free',
+  'tbd',
+  'n/a',
+  'na',
+];
+
 /**
  * Validates IP address format
  */
@@ -213,10 +227,12 @@ export async function parseExcelSheet(
               let status: 'ASSIGNED' | 'AVAILABLE' | 'RESERVED' = 'ASSIGNED';
               const machineId = adjacentValue; // Preserve exactly as written (no placeholders)
               const normalizedAdjacent = adjacentTrimmed.toLowerCase();
+              const adjacentIsIP = isValidIPAddress(adjacentTrimmed);
+              const adjacentMatchesIP =
+                adjacentIsIP && normalizeIPAddress(adjacentTrimmed) === normalizeIPAddress(cellValue);
+              const isReservedKeyword = RESERVED_KEYWORDS.some((keyword) => normalizedAdjacent.includes(keyword));
 
-              if (adjacentTrimmed === '' || adjacentTrimmed === '-') {
-                status = 'RESERVED';
-              } else if (normalizedAdjacent.includes('reserved')) {
+              if (adjacentTrimmed === '' || adjacentTrimmed === '-' || adjacentIsIP || adjacentMatchesIP || isReservedKeyword) {
                 status = 'RESERVED';
               } else {
                 status = 'ASSIGNED';
