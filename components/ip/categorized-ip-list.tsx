@@ -222,23 +222,25 @@ function CollapsibleCategory({
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="space-y-2 h-full flex flex-col">
-            <div className="flex items-center justify-between p-2 rounded-lg border bg-card text-card-foreground shadow-sm">
-                <CollapsibleTrigger asChild>
-                    <Button variant="ghost" size="sm" className="p-0 hover:bg-transparent w-full justify-start h-auto py-1">
-                        {isOpen ? <ChevronDown className="h-4 w-4 mr-2 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mr-2 text-muted-foreground" />}
-                        <div className="flex flex-col items-start text-left">
-                            <h3 className="font-semibold text-base">{category}</h3>
-                            <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="secondary" className="text-[10px] px-1.5 h-5">{stats.total} IPs</Badge>
-                                {stats.available > 0 &&
-                                    <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1.5 h-5 flex items-center rounded-full border border-green-100">
-                                        {stats.available} Free
-                                    </span>
-                                }
+            <div className="flex items-center justify-between gap-2 p-2 rounded-lg border bg-card text-card-foreground shadow-sm">
+                <div className="flex-1 min-w-0">
+                    <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="p-0 hover:bg-transparent w-full justify-start h-auto py-1 min-w-0">
+                            {isOpen ? <ChevronDown className="h-4 w-4 mr-2 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mr-2 text-muted-foreground" />}
+                            <div className="flex flex-col items-start text-left min-w-0">
+                                <h3 className="font-semibold text-base truncate w-full">{category}</h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 h-5">{stats.total} IPs</Badge>
+                                    {stats.available > 0 &&
+                                        <span className="text-[10px] text-green-600 font-medium bg-green-50 px-1.5 h-5 flex items-center rounded-full border border-green-100">
+                                            {stats.available} Free
+                                        </span>
+                                    }
+                                </div>
                             </div>
-                        </div>
-                    </Button>
-                </CollapsibleTrigger>
+                        </Button>
+                    </CollapsibleTrigger>
+                </div>
                 {onDeleteCategory && (deleteCount || 0) > 0 && (
                     <Button
                         variant="destructive"
@@ -247,7 +249,7 @@ function CollapsibleCategory({
                             e.stopPropagation();
                             onDeleteCategory();
                         }}
-                        className="ml-2 h-8"
+                        className="ml-2 h-8 shrink-0"
                     >
                         <Trash2 className="h-3.5 w-3.5 mr-2" />
                         Delete
