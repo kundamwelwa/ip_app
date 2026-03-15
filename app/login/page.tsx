@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,14 @@ import { LoginFormData } from "@/types/auth";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function LoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -21,16 +29,42 @@ function LoginForm() {
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [modalState, setModalState] = useState<{
+    open: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+  }>({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
   
   const router = useRouter();
   const searchParams = useSearchParams();
   const message = searchParams.get("message");
 
+  const openModal = useCallback(
+    (
+      type: "success" | "error",
+      title: string,
+      message: string
+    ) => {
+      setModalState({ open: true, type, title, message });
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (message) {
+      openModal("success", "Success", message);
+    }
+  }, [message, openModal]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
 
     try {
       const result = await signIn("credentials", {
@@ -40,12 +74,18 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        // NextAuth overrides errors with "CredentialsSignin" by default unless configured.
+        // If it throws "CredentialsSignin", give a generic broad error.
+        // If our thrown error bubbles up, we can print it.
+        const errorMessage = result.error === "CredentialsSignin" 
+          ? "Invalid email, password, or your account resides in a pending/unauthorized state."
+          : result.error;
+        openModal("error", "Sign-in failed", errorMessage);
       } else {
         router.push("/dashboard");
       }
     } catch (error) {
-      setError("An error occurred. Please try again.");
+      openModal("error", "Sign-in failed", "An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -92,33 +132,9 @@ function LoginForm() {
               </CardTitle>
               <CardDescription className="text-amber-100/60 text-base">
                 Sign in to access the IP Management System
-              </CardDescription>
+          </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Success Message */}
-              {message && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mb-4 p-4 bg-green-500/10 border border-green-500/30 text-green-300 rounded-lg flex items-start gap-3"
-                >
-                  <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm">{message}</p>
-                </motion.div>
-              )}
-              
-              {/* Error Message */}
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mb-4 p-4 bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg flex items-start gap-3"
-                >
-                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm">{error}</p>
-                </motion.div>
-              )}
-              
               <form onSubmit={handleSubmit} className="space-y-5">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -228,6 +244,39 @@ function LoginForm() {
           </Card>
         </motion.div>
       </div>
+
+      <Dialog
+        open={modalState.open}
+        onOpenChange={(open) => setModalState((prev) => ({ ...prev, open }))}
+      >
+        <DialogContent className="bg-slate-900 border border-amber-500/30 text-white shadow-2xl">
+          <DialogHeader className="text-left">
+            <div className="flex items-center gap-2">
+              {modalState.type === "success" ? (
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-400" />
+              )}
+              <DialogTitle className="text-xl font-semibold">
+                {modalState.title}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-amber-100/70 mt-1">
+              {modalState.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="bg-amber-500 hover:bg-amber-600 text-slate-900"
+              onClick={() =>
+                setModalState((prev) => ({ ...prev, open: false }))
+              }
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,18 +12,35 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
+        const ip = req.headers?.['x-forwarded-for'] || '127.0.0.1';
+        if (typeof ip === 'string' && !checkRateLimit(ip)) {
+          throw new Error("Too many login attempts, please try again later.");
+        }
+
+        const normalizedEmail = credentials.email.toLowerCase().trim();
+
+        // Enforcement: Must be @fqml.com strictly
+        if (!normalizedEmail.endsWith('@fqml.com')) {
+          throw new Error("Login is restricted strictly to @fqml.com domains.");
+        }
+
         try {
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email: normalizedEmail },
           });
 
-          if (!user || !user.isActive) {
-            return null;
+          if (!user) {
+            throw new Error("Invalid email, password, or your account resides in a pending/unauthorized state.");
+          }
+
+    
+          if (!user.isActive && normalizedEmail !== (process.env.SUPER_ADMIN_EMAIL || "").toLowerCase()) {
+            throw new Error("Account is inactive or pending Super Admin approval.");
           }
 
           const isPasswordValid = await bcrypt.compare(
@@ -31,7 +49,15 @@ export const authOptions: NextAuthOptions = {
           );
 
           if (!isPasswordValid) {
-            return null;
+            throw new Error("Invalid email, password, or your account resides in a pending/unauthorized state.");
+          }
+
+          // Register successful login IP explicitly (Audit Trail extension)
+          if (typeof ip === 'string') {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { lastLoginIp: ip } as any,
+            });
           }
 
           return {
@@ -40,10 +66,12 @@ export const authOptions: NextAuthOptions = {
             name: `${user.firstName} ${user.lastName}`,
             role: user.role,
             department: user.department,
+            sessionVersion: (user as any).sessionVersion || 0,
+            permissions: (user as any).permissions || [],
           };
-        } catch (error) {
+        } catch (error: any) {
           console.error("Auth error:", error);
-          return null;
+          throw new Error(error.message || "Authentication failed.");
         }
       },
     }),
@@ -55,17 +83,54 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      // Initial sign-in
       if (user) {
         token.role = user.role;
         token.department = user.department;
+        token.sessionVersion = (user as any).sessionVersion;
+        token.permissions = (user as any).permissions;
       }
+      
+      // On every subsequent request, we do a lightweight check against the DB
+      // to guarantee immediate session termination if privileges are revoked
+      if (token?.sub) {
+        try {
+          // If you see performance issues, this could be cached in Redis.
+          const freshUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+          }) as any;
+
+          if (!freshUser || !freshUser.isActive) {
+            return { ...token, error: "SessionTerminated" }; 
+          }
+
+          // If session version changed (e.g. Super Admin modified privileges), terminate
+          if (freshUser.sessionVersion !== token.sessionVersion) {
+            return { ...token, error: "SessionTerminated" };
+          }
+          
+          // Keep token in sync with DB
+          token.role = freshUser.role;
+          token.permissions = freshUser.permissions;
+        } catch (error) {
+          // Fallback to existing token in case of DB transient error
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
       if (token) {
+        if (token.error === "SessionTerminated") {
+          // By returning an empty or invalid session, the client is forced out
+          // Provide an empty/broken session object to NextAuth
+          return { ...session, error: "RefreshAccessTokenError" } as any;
+        }
+
         session.user.id = token.sub!;
         session.user.role = token.role as string;
         session.user.department = token.department as string;
+        (session.user as any).permissions = token.permissions;
       }
       return session;
     },

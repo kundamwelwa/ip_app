@@ -18,7 +18,7 @@ export default function UsersPage() {
 
   // Redirect non-admins
   useEffect(() => {
-    if (session?.user && session.user.role !== "ADMIN") {
+    if (session?.user && !["ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
       router.push("/dashboard");
     }
   }, [session, router]);
@@ -34,7 +34,7 @@ export default function UsersPage() {
     );
   }
 
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session || !["ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
     return null;
   }
 

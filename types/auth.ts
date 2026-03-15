@@ -34,7 +34,8 @@ export interface RegisterFormData {
   password: string;
   confirmPassword: string;
   department: string;
-  role: "ADMIN" | "MANAGER" | "TECHNICIAN";
+  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER";
+  setupToken?: string;
 }
 
 export interface User {
@@ -43,7 +44,7 @@ export interface User {
   lastName: string;
   email: string;
   department: string;
-  role: "ADMIN" | "MANAGER" | "TECHNICIAN";
+  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER";
   createdAt: Date;
   updatedAt: Date;
 }

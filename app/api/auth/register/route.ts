@@ -2,15 +2,35 @@ import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { RegisterFormData } from "@/types/auth"
+import { checkRegistrationRateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: NextRequest) {
   try {
+    // Brute Force Protection: Exponential Backoff for Registration
+    const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+    const rateLimitCheck = checkRegistrationRateLimit(ip);
+    if (!rateLimitCheck.allowed) {
+      return NextResponse.json(
+        { error: `Too many registration attempts. Please try again after ${rateLimitCheck.retryAfter} seconds.` },
+        { status: 429 }
+      );
+    }
+
     // Parse and validate request body
     const body: RegisterFormData = await request.json()
-    const { firstName, lastName, email, password, department, role } = body
+    const { firstName, lastName, email, password, department, role, setupToken } = body
+
+    // Domain Reservation: Case-Insensitive @fqml.com Gatekeeper
+    const normalizedEmail = email?.toLowerCase().trim();
+    if (!normalizedEmail || !normalizedEmail.endsWith('@fqml.com')) {
+      return NextResponse.json(
+        { error: "Registration is restricted explicitly to @fqml.com domains." },
+        { status: 403 }
+      );
+    }
 
     // Validate required fields
-    if (!firstName || !lastName || !email || !password || !department || !role) {
+    if (!firstName || !lastName || !password || !department || !role) {
       return NextResponse.json(
         { error: "All fields are required" },
         { status: 400 }
@@ -34,16 +54,41 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
+    // Super Admin 'Secret Handshake' logic with Kill Switch
+    let isSuperAdminBootstrap = false;
+    const BOOTSTRAP_TOKEN = "c4833246ca77f610470e25e6400b8d25c45ff032abf2a55b85eb8afe815461e1";
+
+    if (setupToken === BOOTSTRAP_TOKEN) {
+      // The "Kill Switch": Validate and verify singleton instance
+      const systemSettings = await (prisma as any).systemSettings.findUnique({
+        where: { id: "global" }
+      });
+      const isBootstrapped = systemSettings?.isBootstrapped || false;
+
+      if (isBootstrapped) {
+        return NextResponse.json(
+          { error: "System is already bootstrapped. The master token is permanently rejected." },
+          { status: 403 }
+        );
+      }
+      isSuperAdminBootstrap = true;
+    }
+
+    const assignedRole = isSuperAdminBootstrap ? "SUPER_ADMIN" : "USER";
+    const isActiveStatus = isSuperAdminBootstrap ? true : false;
+    const permissionsArr = isSuperAdminBootstrap ? ["*"] : [];
+
     const user = await prisma.user.create({
       data: {
         firstName,
         lastName,
-        email,
+        email: normalizedEmail,
         password: hashedPassword,
         department,
-        role: role as "ADMIN" | "MANAGER" | "TECHNICIAN",
-      },
+        role: assignedRole as any,
+        isActive: isActiveStatus, 
+        permissions: permissionsArr,
+      } as any,
       select: {
         id: true,
         firstName: true,
@@ -54,6 +99,15 @@ export async function POST(request: NextRequest) {
         createdAt: true,
       }
     })
+
+    // Permanently disable token reuse via Kill Switch
+    if (isSuperAdminBootstrap) {
+      await (prisma as any).systemSettings.upsert({
+        where: { id: "global" },
+        update: { isBootstrapped: true },
+        create: { id: "global", isBootstrapped: true }
+      });
+    }
 
     // Create audit log (non-blocking - don't fail registration if this fails)
     try {

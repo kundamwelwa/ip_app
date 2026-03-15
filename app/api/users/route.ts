@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     
     console.log("Fetching users, session:", session?.user?.email);
     
-    if (!session?.user?.id || session.user.role !== "ADMIN") {
+    if (!session?.user?.id || !["ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
       console.log("Unauthorized access attempt");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
         department: true,
         role: true,
         isActive: true,
+        permissions: true,
         createdAt: true,
         updatedAt: true,
         // Temporarily removed counts until all tables are created
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
         //     reports: true,
         //   },
         // },
-      },
+      } as any,
       orderBy: { createdAt: "desc" },
     });
 
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id || session.user.role !== "ADMIN") {
+    if (!session?.user?.id || !["ADMIN", "SUPER_ADMIN"].includes(session.user.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -99,10 +100,19 @@ export async function POST(request: Request) {
       isActive = true,
     } = body;
 
+    const normalizedEmail = email?.toLowerCase().trim();
+
     // Validation
-    if (!email || !firstName || !lastName || !department || !role || !password) {
+    if (!normalizedEmail || !firstName || !lastName || !department || !role || !password) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    if (!normalizedEmail.endsWith("@fqml.com")) {
+      return NextResponse.json(
+        { error: "Email domain must be @fqml.com" },
         { status: 400 }
       );
     }
@@ -116,7 +126,7 @@ export async function POST(request: Request) {
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -132,7 +142,7 @@ export async function POST(request: Request) {
     // Create user
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         firstName,
         lastName,
         department,

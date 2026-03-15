@@ -20,7 +20,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, UserPlus, Save, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { User } from "./users-dashboard";
+
+const CAPABILITY_FLAGS = [
+  { id: "VIEW_DASHBOARD", label: "View Dashboard" },
+  { id: "MANAGE_USERS", label: "Manage Users" },
+  { id: "MANAGE_EQUIPMENT", label: "Manage Equipment" },
+  { id: "VIEW_EQUIPMENT", label: "View Equipment" },
+  { id: "MANAGE_IP", label: "Manage IPs" },
+  { id: "RESOLVE_ALERTS", label: "Resolve Alerts" },
+];
 
 interface UserFormDialogProps {
   open: boolean;
@@ -28,6 +38,7 @@ interface UserFormDialogProps {
   user?: User | null;
   onSuccess: (message: string, type?: "success" | "error") => void;
   mode: "add" | "edit";
+  isSuperAdmin?: boolean;
 }
 
 export function UserFormDialog({
@@ -36,6 +47,7 @@ export function UserFormDialog({
   user,
   onSuccess,
   mode,
+  isSuperAdmin = false,
 }: UserFormDialogProps) {
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -44,10 +56,11 @@ export function UserFormDialog({
     lastName: "",
     email: "",
     department: "",
-    role: "TECHNICIAN" as "ADMIN" | "MANAGER" | "TECHNICIAN",
+    role: "TECHNICIAN" as "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER",
     password: "",
     confirmPassword: "",
     isActive: true,
+    permissions: [] as string[],
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -63,6 +76,7 @@ export function UserFormDialog({
         password: "",
         confirmPassword: "",
         isActive: user.isActive,
+        permissions: user.permissions || [],
       });
     } else {
       // Reset form when adding new user
@@ -75,6 +89,7 @@ export function UserFormDialog({
         password: "",
         confirmPassword: "",
         isActive: true,
+        permissions: [],
       });
     }
     setErrors({});
@@ -149,9 +164,23 @@ export function UserFormDialog({
         throw new Error(data.error || `Failed to ${mode} user`);
       }
 
+      // Separate Call for Granular Permissions explicitly for Super Admins
+      if (isSuperAdmin && user?.id && mode === "edit") {
+        try {
+          await fetch(`/api/users/${user.id}/permissions`, {
+            method: 'PATCH',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ permissions: formData.permissions })
+          });
+        } catch (err) {
+          console.error("Could not sync permissions", err);
+        }
+      }
+
       const successMessage = `User ${formData.firstName} ${formData.lastName} ${mode === "add" ? "created" : "updated"} successfully!`;
       onSuccess(successMessage, "success");
       onOpenChange(false);
+
     } catch (err) {
       console.error(`Error ${mode}ing user:`, err);
       setSubmitError(err instanceof Error ? err.message : `Failed to ${mode} user`);
@@ -296,15 +325,19 @@ export function UserFormDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                     <SelectItem value="ADMIN">Administrator</SelectItem>
                     <SelectItem value="MANAGER">Manager</SelectItem>
                     <SelectItem value="TECHNICIAN">Technician</SelectItem>
+                    <SelectItem value="USER">Standard User</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
+                  {formData.role === "SUPER_ADMIN" && "Absolute root access"}
                   {formData.role === "ADMIN" && "Full system access"}
                   {formData.role === "MANAGER" && "Management and reporting access"}
                   {formData.role === "TECHNICIAN" && "Operational access only"}
+                  {formData.role === "USER" && "Standard restricted access"}
                 </p>
               </div>
             </div>
@@ -381,6 +414,41 @@ export function UserFormDialog({
               className="h-4 w-4"
             />
           </div>
+
+          {/* Super Admin: Capability Flags */}
+          {isSuperAdmin && mode === "edit" && (
+            <div className="space-y-4 p-4 border rounded-lg bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50">
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-semibold text-red-700 dark:text-red-400">Super Admin Capability Flags</h3>
+                <p className="text-xs text-red-600/80 dark:text-red-400/80">
+                  Explicitly override capabilities for this user. Toggles will force an immediate session termination for the target user.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                {CAPABILITY_FLAGS.map((flag) => (
+                  <div key={flag.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`flag-${flag.id}`}
+                      checked={formData.permissions.includes(flag.id)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFormData({ ...formData, permissions: [...formData.permissions, flag.id] });
+                        } else {
+                          setFormData({ 
+                            ...formData, 
+                            permissions: formData.permissions.filter(p => p !== flag.id) 
+                          });
+                        }
+                      }}
+                    />
+                    <Label htmlFor={`flag-${flag.id}`} className="text-sm font-medium">
+                      {flag.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>

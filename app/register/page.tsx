@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,23 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { validatePassword } from "@/lib/password-validation";
 import { AnimatedGridBackground } from "@/components/ui/animated-grid-background";
+import { AuthFormSkeleton } from "@/components/ui/auth-skeleton";
 import { RegisterFormData } from "@/types/auth";
-import { UserPlus, Mail, User, Briefcase, Shield, Lock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { UserPlus, Mail, User, Briefcase, Shield, Lock, AlertCircle, CheckCircle2, Key } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-export default function RegisterPage() {
+function RegisterForm() {
+  const searchParams = useSearchParams();
+  const isBootstrap = searchParams.get("bootstrap") === "true";
+
   const [formData, setFormData] = useState<RegisterFormData>({
     firstName: "",
     lastName: "",
@@ -22,28 +35,48 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
     department: "",
-    role: "ADMIN",
+    role: "USER",
+    setupToken: "",
   });
 
   const [passwordStrength, setPasswordStrength] = useState(validatePassword(""));
-  const [confirmPasswordError, setConfirmPasswordError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [modalState, setModalState] = useState<{
+    open: boolean;
+    type: "success" | "error";
+    title: string;
+    message: string;
+  }>({
+    open: false,
+    type: "success",
+    title: "",
+    message: "",
+  });
+
+  const openModal = useCallback(
+    (
+      type: "success" | "error",
+      title: string,
+      message: string
+    ) => {
+      setModalState({ open: true, type, title, message });
+    },
+    []
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setIsLoading(true);
     
     if (!passwordStrength.isValid) {
-      setError("Password does not meet security requirements");
+      openModal("error", "Password requirements", "Password does not meet security requirements.");
       setIsLoading(false);
       return;
     }
     
     if (formData.password !== formData.confirmPassword) {
-      setConfirmPasswordError("Passwords do not match");
+      openModal("error", "Password mismatch", "Passwords do not match.");
       setIsLoading(false);
       return;
     }
@@ -59,18 +92,19 @@ export default function RegisterPage() {
 
       if (response.ok) {
         setSuccess(true);
+        openModal("success", "Account created", "Account created successfully! Redirecting to sign in.");
         // Registration successful, redirect to login after a brief delay
         setTimeout(() => {
           window.location.href = "/login?message=Registration successful. Please sign in.";
         }, 1500);
       } else {
         const errorData = await response.json();
-        setError(errorData.error || "Registration failed");
+        openModal("error", "Registration failed", errorData.error || "Registration failed.");
         setIsLoading(false);
       }
     } catch (error) {
       console.error("Registration error:", error);
-      setError("Registration failed. Please try again.");
+      openModal("error", "Registration failed", "Registration failed. Please try again.");
       setIsLoading(false);
     }
   };
@@ -86,14 +120,9 @@ export default function RegisterPage() {
     if (name === "password") {
       setPasswordStrength(validatePassword(value));
     }
-
-    // Clear confirm password error when confirm password changes
-    if (name === "confirmPassword") {
-      setConfirmPasswordError("");
-    }
   };
 
-  const handleRoleChange = (value: "ADMIN" | "MANAGER" | "TECHNICIAN") => {
+  const handleRoleChange = (value: "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER") => {
     setFormData({
       ...formData,
       role: value,
@@ -134,33 +163,9 @@ export default function RegisterPage() {
               </CardTitle>
               <CardDescription className="text-amber-100/60 text-base">
                 Join the network management team
-              </CardDescription>
+          </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Error Message */}
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="mb-4 p-4 bg-red-500/10 border border-red-500/30 text-red-300 rounded-lg flex items-start gap-3"
-                >
-                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm">{error}</p>
-                </motion.div>
-              )}
-              
-              {/* Success Message */}
-              {success && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="mb-4 p-4 bg-green-500/10 border border-green-500/30 text-green-300 rounded-lg flex items-start gap-3"
-                >
-                  <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm">Account created successfully! Redirecting...</p>
-                </motion.div>
-              )}
-              
               <form onSubmit={handleSubmit} className="space-y-4">
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -270,13 +275,42 @@ export default function RegisterPage() {
                       </SelectItem>
                       <SelectItem value="TECHNICIAN" className="text-white hover:bg-amber-500/10">
                         <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-amber-500" />
+                          <Briefcase className="w-4 h-4 text-amber-500" />
                           Network Technician
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="USER" className="text-white hover:bg-amber-500/10">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-amber-500" />
+                          Standard User
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </motion.div>
+
+                {isBootstrap && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.28 }}
+                    className="space-y-2"
+                  >
+                    <Label htmlFor="setupToken" className="text-amber-100/80 font-medium flex items-center gap-2">
+                      <Key className="w-4 h-4" />
+                      Setup Token (Secret Handshake)
+                    </Label>
+                    <Input
+                      id="setupToken"
+                      name="setupToken"
+                      type="password"
+                      value={formData.setupToken}
+                      onChange={handleInputChange}
+                      placeholder="Enter bootstrap token"
+                      className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white placeholder:text-slate-400 h-11"
+                    />
+                  </motion.div>
+                )}
                 
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -318,16 +352,6 @@ export default function RegisterPage() {
                     required
                     className="bg-slate-800/50 border-amber-500/20 focus:border-amber-500/50 text-white placeholder:text-slate-400 h-11"
                   />
-                  {confirmPasswordError && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm text-red-400 flex items-center gap-1"
-                    >
-                      <AlertCircle className="w-3 h-3" />
-                      {confirmPasswordError}
-                    </motion.p>
-                  )}
                 </motion.div>
                 
                 <motion.div
@@ -397,6 +421,61 @@ export default function RegisterPage() {
           </Card>
         </motion.div>
       </div>
+
+      <Dialog
+        open={modalState.open}
+        onOpenChange={(open) => setModalState((prev) => ({ ...prev, open }))}
+      >
+        <DialogContent className="bg-slate-900 border border-amber-500/30 text-white shadow-2xl">
+          <DialogHeader className="text-left">
+            <div className="flex items-center gap-2">
+              {modalState.type === "success" ? (
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-400" />
+              )}
+              <DialogTitle className="text-xl font-semibold">
+                {modalState.title}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-amber-100/70 mt-1">
+              {modalState.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              className="bg-amber-500 hover:bg-amber-600 text-slate-900"
+              onClick={() =>
+                setModalState((prev) => ({ ...prev, open: false }))
+              }
+            >
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-zinc-900 to-slate-900">
+        <div className="hidden lg:block lg:w-1/2 fixed left-0 top-0 h-screen">
+          <AnimatedGridBackground
+            imageSrc="/authimage.jpg"
+            systemName="Rajant Mesh Network"
+            subtitle="IP Address • Management System"
+          />
+        </div>
+        <div className="w-full lg:w-1/2 lg:ml-auto flex items-center justify-center p-8 min-h-screen">
+          <AuthFormSkeleton />
+        </div>
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }

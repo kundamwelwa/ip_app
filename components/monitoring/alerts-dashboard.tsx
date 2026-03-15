@@ -217,7 +217,7 @@ export function AlertsDashboard({ session }: AlertsDashboardProps) {
   });
 
   const userRole = session?.user?.role || "TECHNICIAN";
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(userRole || "");
   const isManager = userRole === "MANAGER";
 
   // Fetch alerts

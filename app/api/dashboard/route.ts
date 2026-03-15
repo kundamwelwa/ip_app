@@ -7,9 +7,9 @@ import { checkAllEquipmentStatus } from "@/lib/equipment-communication";
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    /*if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    }*/
 
     const { searchParams } = new URL(request.url);
     const realTimeCheck = searchParams.get("realTime") === "true";
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
     const formattedActivity = recentActivity.map((log) => ({
       id: log.id,
       action: log.action,
-      user: `${log.user.firstName} ${log.user.lastName}`,
+      user: log.user ? `${log.user.firstName} ${log.user.lastName}` : "System Role",
       entity: log.equipment?.name || log.ipAddress?.address || "Unknown",
       time: new Date(log.createdAt).toLocaleString(),
     }));
@@ -222,10 +222,10 @@ export async function GET(request: NextRequest) {
     };
 
     return NextResponse.json(dashboardData);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching dashboard data:", error);
     return NextResponse.json(
-      { error: "Failed to fetch dashboard data" },
+      { error: "Failed to fetch dashboard data", message: error.message, stack: error.stack },
       { status: 500 }
     );
   }

@@ -18,6 +18,7 @@ interface UserStatsProps {
     admins: number;
     managers: number;
     technicians: number;
+    users: number;
   };
 }
 

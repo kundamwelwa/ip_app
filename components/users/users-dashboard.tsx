@@ -39,11 +39,12 @@ export interface User {
   firstName: string;
   lastName: string;
   department: string;
-  role: "ADMIN" | "MANAGER" | "TECHNICIAN";
+  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   lastLogin?: string;
+  permissions?: string[];
   _count?: {
     ipAssignments: number;
     auditLogs: number;
@@ -91,7 +92,7 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
       if (showLoader) setLoading(true);
       setError(null);
 
-      const response = await fetch("/api/users");
+      const response = await fetch(`/api/users?t=${Date.now()}`);
       if (!response.ok) throw new Error("Failed to fetch users");
 
       const data = await response.json();
@@ -232,9 +233,10 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
     total: users.length,
     active: users.filter((u) => u.isActive).length,
     inactive: users.filter((u) => !u.isActive).length,
-    admins: users.filter((u) => u.role === "ADMIN").length,
+    admins: users.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN").length,
     managers: users.filter((u) => u.role === "MANAGER").length,
     technicians: users.filter((u) => u.role === "TECHNICIAN").length,
+    users: users.filter((u) => u.role === "USER").length,
   };
 
   if (loading) {
@@ -372,6 +374,7 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
           showToast(message, type);
         }}
         mode="add"
+        isSuperAdmin={session.user.role === "SUPER_ADMIN"}
       />
 
       {/* Edit User Dialog */}
@@ -384,6 +387,7 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
           showToast(message, type);
         }}
         mode="edit"
+        isSuperAdmin={session.user.role === "SUPER_ADMIN"}
       />
 
       {/* Settings Dialog */}

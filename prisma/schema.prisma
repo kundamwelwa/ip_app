@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // User Management
@@ -17,15 +18,18 @@ model User {
   firstName      String
   lastName       String
   department     String
-  role           UserRole @default(ADMIN)
+  role           UserRole @default(USER)
   password       String
   phoneNumber    String?
   profilePicture String?
   resetToken     String?
   resetTokenExpiry DateTime?
   isActive       Boolean  @default(true)
+  permissions    String[] @default([])
+  sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  lastLoginIp    String?
 
   // Relations
   ipAssignments IPAssignment[]
@@ -40,9 +44,11 @@ model User {
 }
 
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   MANAGER
   TECHNICIAN
+  USER
 }
 
 // IP Address Management
@@ -333,4 +339,13 @@ model ReportTemplate {
   @@map("report_templates")
   @@index([category])
   @@index([isActive])
+}
+
+// System Settings
+model SystemSettings {
+  id               String   @id @default("global")
+  isBootstrapped   Boolean  @default(false)
+  updatedAt        DateTime @updatedAt
+
+  @@map("system_settings")
 }
