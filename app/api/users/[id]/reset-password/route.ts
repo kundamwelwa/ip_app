@@ -50,7 +50,10 @@ export async function POST(
     // Update password
     await prisma.user.update({
       where: { id },
-      data: { password: hashedPassword },
+      data: { 
+        password: hashedPassword,
+        sessionVersion: { increment: 1 },
+      },
     });
 
     // Create audit log

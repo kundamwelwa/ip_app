@@ -151,6 +151,11 @@ export async function PATCH(
         : null;
     }
 
+    // Any admin action should bump session version to invalidate live sessions and trigger realtime notice
+    if (!updateData.sessionVersion) {
+      updateData.sessionVersion = { increment: 1 };
+    }
+
     // Update user
     const user = await prisma.user.update({
       where: { id },

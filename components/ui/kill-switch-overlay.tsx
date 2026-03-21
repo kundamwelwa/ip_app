@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, ShieldAlert, LogOut, Bell } from "lucide-react";
+import { Mail, ShieldAlert, LogOut, Bell, Info } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { useKillSwitch } from "@/hooks/use-kill-switch";
 
 export function KillSwitchOverlay() {
-  const { banner, killSwitch, clearBanner } = useKillSwitch();
+  const { banner, killSwitch, accountNotice, clearBanner, clearAccountNotice } = useKillSwitch();
 
   // Block keyboard shortcuts and scrolling while the overlay is active
   useEffect(() => {
@@ -59,6 +59,34 @@ export function KillSwitchOverlay() {
 
   return (
     <>
+      <AnimatePresence>
+        {accountNotice && !killSwitch.triggered && (
+          <motion.div
+            key="account-notice"
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className="fixed top-4 inset-x-0 z-[12500] flex justify-center px-4"
+          >
+            <div className="max-w-3xl w-full mx-auto bg-gradient-to-br from-emerald-900/90 to-slate-900/90 text-emerald-50 border border-emerald-500/40 shadow-2xl backdrop-blur-xl rounded-2xl p-4 flex items-start gap-3">
+              <div className="mt-0.5">
+                <Info className="h-5 w-5 text-emerald-200" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-sm font-semibold tracking-wide uppercase text-emerald-100/80">
+                  Account Updated
+                </p>
+                <p className="text-sm leading-relaxed text-emerald-50/90">{accountNotice}</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={clearAccountNotice} className="text-emerald-50">
+                Dismiss
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {banner && !killSwitch.triggered && (
           <motion.div

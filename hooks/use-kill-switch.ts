@@ -23,6 +23,10 @@ export function useKillSwitch() {
     reason: undefined,
     deactivatedAt: undefined,
   });
+  const [accountNotice, setAccountNotice] = useState<string | null>(null);
+  const [lastSessionVersion, setLastSessionVersion] = useState<number | null>(
+    (session?.user as any)?.sessionVersion ?? null
+  );
 
   const canUseSupabase = useMemo(
     () =>
@@ -53,6 +57,17 @@ export function useKillSwitch() {
         reason: record.deactivationReason || "Account access disabled by administrator.",
         deactivatedAt: record.deactivatedAt,
       });
+      return;
+    }
+
+    // Handle account updates while still active
+    const incomingVersion = typeof record.sessionVersion === "number" ? record.sessionVersion : null;
+    if (
+      incomingVersion !== null &&
+      (lastSessionVersion === null || incomingVersion > lastSessionVersion)
+    ) {
+      setLastSessionVersion(incomingVersion);
+      setAccountNotice("Your account settings were updated by an administrator. Some permissions may have changed.");
     }
   };
 
@@ -124,9 +139,18 @@ export function useKillSwitch() {
     return () => clearTimeout(timer);
   }, [banner]);
 
+  // Keep lastSessionVersion in sync when session updates
+  useEffect(() => {
+    if (session?.user && typeof (session.user as any).sessionVersion === "number") {
+      setLastSessionVersion((session.user as any).sessionVersion);
+    }
+  }, [session]);
+
   return {
     banner,
     killSwitch,
+    accountNotice,
     clearBanner: () => setBanner(null),
+    clearAccountNotice: () => setAccountNotice(null),
   };
 }
