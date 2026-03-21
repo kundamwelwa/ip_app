@@ -40,6 +40,12 @@ export async function GET(request: NextRequest) {
         department: true,
         role: true,
         isActive: true,
+        deactivationReason: true,
+        deactivatedAt: true,
+        deactivatedBy: true,
+        suspendedUntil: true,
+        bannerMessage: true,
+        bannerExpiresAt: true,
         permissions: true,
         createdAt: true,
         updatedAt: true,
@@ -61,6 +67,9 @@ export async function GET(request: NextRequest) {
       ...user,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
+      deactivatedAt: user.deactivatedAt ? user.deactivatedAt.toISOString() : null,
+      suspendedUntil: user.suspendedUntil ? user.suspendedUntil.toISOString() : null,
+      bannerExpiresAt: user.bannerExpiresAt ? user.bannerExpiresAt.toISOString() : null,
     }));
 
     return NextResponse.json({ users: formattedUsers });

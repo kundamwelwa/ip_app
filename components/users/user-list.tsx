@@ -36,6 +36,8 @@ import {
   Loader2,
   Users,
   RefreshCw,
+  Megaphone,
+  Clock4,
 } from "lucide-react";
 import { User } from "./users-dashboard";
 
@@ -45,7 +47,7 @@ interface UserListProps {
   currentUserId: string;
   onEdit: (user: User) => void;
   onDelete: (user: User) => void;
-  onToggleActive: (userId: string, isActive: boolean) => void;
+  onStatusAction: (user: User, action?: "deactivate" | "activate" | "suspend" | "banner") => void;
   onResetPassword: (user: User) => void;
   onRefresh: () => void;
 }
@@ -56,7 +58,7 @@ export function UserList({
   currentUserId,
   onEdit,
   onDelete,
-  onToggleActive,
+  onStatusAction,
   onResetPassword,
   onRefresh,
 }: UserListProps) {
@@ -253,7 +255,21 @@ export function UserList({
                       <TableCell>
                         <span className="text-sm">{user.department}</span>
                       </TableCell>
-                      <TableCell>{getStatusBadge(user.isActive)}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          {getStatusBadge(user.isActive)}
+                          {!user.isActive && user.deactivationReason && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {user.deactivationReason}
+                            </p>
+                          )}
+                          {user.suspendedUntil && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Suspended until {new Date(user.suspendedUntil).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm">
                           <Calendar className="h-3 w-3 text-muted-foreground" />
@@ -298,7 +314,7 @@ export function UserList({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => onToggleActive(user.id, user.isActive)}
+                            onClick={() => onStatusAction(user, user.isActive ? "deactivate" : "activate")}
                             title={user.isActive ? "Deactivate" : "Activate"}
                             className="h-8 w-8 p-0"
                             disabled={user.id === currentUserId}
@@ -308,6 +324,25 @@ export function UserList({
                                 user.isActive ? "text-green-600" : "text-red-600"
                               }`}
                             />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onStatusAction(user, "suspend")}
+                            title="Suspend with timer"
+                            className="h-8 w-8 p-0"
+                            disabled={user.id === currentUserId}
+                          >
+                            <Clock4 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onStatusAction(user, "banner")}
+                            title="Send banner/warning"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Megaphone className="h-3 w-3" />
                           </Button>
                           <Button
                             size="sm"

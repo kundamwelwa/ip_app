@@ -38,14 +38,29 @@ export const authOptions: NextAuthOptions = {
             throw new Error("Invalid email, password, or your account resides in a pending/unauthorized state.");
           }
 
-    
-          if (!user.isActive && normalizedEmail !== (process.env.SUPER_ADMIN_EMAIL || "").toLowerCase()) {
-            throw new Error("Account is inactive or pending Super Admin approval.");
+          // Auto re-activate if suspension period has passed
+          const now = new Date();
+          let effectiveUser = user as any;
+          if (user.suspendedUntil && user.suspendedUntil <= now) {
+            effectiveUser = await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                isActive: true,
+                suspendedUntil: null,
+                deactivationReason: null,
+                sessionVersion: { increment: 1 },
+              },
+            });
+          }
+
+          if (!effectiveUser.isActive && normalizedEmail !== (process.env.SUPER_ADMIN_EMAIL || "").toLowerCase()) {
+            const reason = effectiveUser.deactivationReason || "Account is inactive or pending Super Admin approval.";
+            throw new Error(reason);
           }
 
           const isPasswordValid = await bcrypt.compare(
             credentials.password,
-            user.password
+            effectiveUser.password
           );
 
           if (!isPasswordValid) {
@@ -55,19 +70,19 @@ export const authOptions: NextAuthOptions = {
           // Register successful login IP explicitly (Audit Trail extension)
           if (typeof ip === 'string') {
             await prisma.user.update({
-              where: { id: user.id },
+              where: { id: effectiveUser.id },
               data: { lastLoginIp: ip } as any,
             });
           }
 
           return {
-            id: user.id,
-            email: user.email,
-            name: `${user.firstName} ${user.lastName}`,
-            role: user.role,
-            department: user.department,
-            sessionVersion: (user as any).sessionVersion || 0,
-            permissions: (user as any).permissions || [],
+            id: effectiveUser.id,
+            email: effectiveUser.email,
+            name: `${effectiveUser.firstName} ${effectiveUser.lastName}`,
+            role: effectiveUser.role,
+            department: effectiveUser.department,
+            sessionVersion: (effectiveUser as any).sessionVersion || 0,
+            permissions: (effectiveUser as any).permissions || [],
           };
         } catch (error: any) {
           console.error("Auth error:", error);
@@ -100,7 +115,27 @@ export const authOptions: NextAuthOptions = {
             where: { id: token.sub },
           }) as any;
 
-          if (!freshUser || !freshUser.isActive) {
+          if (!freshUser) {
+            return { ...token, error: "SessionTerminated" }; 
+          }
+
+          const now = new Date();
+          if (freshUser.suspendedUntil && freshUser.suspendedUntil <= now) {
+            const reactivated = await prisma.user.update({
+              where: { id: freshUser.id },
+              data: {
+                isActive: true,
+                suspendedUntil: null,
+                deactivationReason: null,
+                sessionVersion: { increment: 1 },
+              },
+            });
+            freshUser.isActive = reactivated.isActive;
+            freshUser.sessionVersion = reactivated.sessionVersion;
+            freshUser.deactivationReason = reactivated.deactivationReason;
+          }
+
+          if (!freshUser.isActive) {
             return { ...token, error: "SessionTerminated" }; 
           }
 
@@ -111,7 +146,9 @@ export const authOptions: NextAuthOptions = {
           
           // Keep token in sync with DB
           token.role = freshUser.role;
+          token.department = freshUser.department;
           token.permissions = freshUser.permissions;
+          token.sessionVersion = freshUser.sessionVersion;
         } catch (error) {
           // Fallback to existing token in case of DB transient error
         }
@@ -131,6 +168,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as string;
         session.user.department = token.department as string;
         (session.user as any).permissions = token.permissions;
+        (session.user as any).sessionVersion = token.sessionVersion;
       }
       return session;
     },

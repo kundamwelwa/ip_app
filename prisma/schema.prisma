@@ -25,6 +25,12 @@ model User {
   resetToken     String?
   resetTokenExpiry DateTime?
   isActive       Boolean  @default(true)
+  deactivationReason String?
+  deactivatedAt  DateTime?
+  deactivatedBy  String?
+  suspendedUntil DateTime?
+  bannerMessage  String?
+  bannerExpiresAt DateTime?
   permissions    String[] @default([])
   sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())

@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserList } from "@/components/users/user-list";
 import { UserStats } from "@/components/users/user-stats";
 import { UserFormDialog } from "@/components/users/user-form-dialog";
@@ -30,6 +32,9 @@ import {
   Loader2,
   AlertTriangle,
   BarChart3,
+  Ban,
+  Clock4,
+  Megaphone,
 } from "lucide-react";
 
 // Types
@@ -43,6 +48,12 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  deactivationReason?: string | null;
+  deactivatedAt?: string | null;
+  deactivatedBy?: string | null;
+  suspendedUntil?: string | null;
+  bannerMessage?: string | null;
+  bannerExpiresAt?: string | null;
   lastLogin?: string;
   permissions?: string[];
   _count?: {
@@ -68,9 +79,19 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusAction, setStatusAction] = useState<"deactivate" | "activate" | "suspend" | "banner">("deactivate");
+  const [statusReason, setStatusReason] = useState("");
+  const [suspendMinutes, setSuspendMinutes] = useState(30);
+  const [statusBanner, setStatusBanner] = useState("");
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [killSwitchOpen, setKillSwitchOpen] = useState(false);
+  const [killReason, setKillReason] = useState("Mass suspension triggered by Super Admin");
+  const [killTarget, setKillTarget] = useState<"STANDARD_USER" | "ALL">("STANDARD_USER");
+  const [killBanner, setKillBanner] = useState("");
+  const [killLoading, setKillLoading] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
@@ -162,25 +183,13 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
     }
   };
 
-  const handleToggleActive = async (userId: string, isActive: boolean) => {
-    try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !isActive }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to update user status");
-      }
-
-      await fetchUsers(false);
-      showToast(`User ${isActive ? "deactivated" : "activated"} successfully`, "success");
-    } catch (err) {
-      console.error("Error updating user status:", err);
-      showToast(err instanceof Error ? err.message : "Failed to update user status", "error");
-    }
+  const handleStatusAction = (user: User, action: "deactivate" | "activate" | "suspend" | "banner" = user.isActive ? "deactivate" : "activate") => {
+    setSelectedUser(user);
+    setStatusAction(action);
+    setStatusReason("");
+    setSuspendMinutes(30);
+    setStatusBanner("");
+    setStatusDialogOpen(true);
   };
 
   const handleResetPassword = (user: User) => {
@@ -188,6 +197,91 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
     setNewPassword("");
     setConfirmPassword("");
     setResetPasswordDialogOpen(true);
+  };
+
+  const submitStatusUpdate = async () => {
+    if (!selectedUser) return;
+
+    try {
+      setActionLoading(true);
+
+      if (statusAction === "banner" && !statusBanner.trim()) {
+        showToast("Please provide a banner message to send.", "error");
+        return;
+      }
+
+      const payload: any = {
+        action: statusAction,
+      };
+
+      if (statusReason) payload.deactivationReason = statusReason;
+      if (statusBanner) payload.bannerMessage = statusBanner;
+
+      if (statusAction === "suspend" && suspendMinutes > 0) {
+        payload.suspendedUntil = new Date(Date.now() + suspendMinutes * 60 * 1000).toISOString();
+        if (!payload.deactivationReason) {
+          payload.deactivationReason = `Suspended for ${suspendMinutes} minutes`;
+        }
+      }
+
+      const response = await fetch(`/api/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update user status");
+      }
+
+      setStatusDialogOpen(false);
+      await fetchUsers(false);
+
+      const successMessage =
+        statusAction === "activate"
+          ? "User reactivated successfully"
+          : statusAction === "banner"
+            ? "Banner message sent"
+            : statusAction === "suspend"
+              ? `User suspended${suspendMinutes ? ` for ${suspendMinutes} minutes` : ""}`
+              : "User deactivated";
+      showToast(successMessage, "success");
+    } catch (err) {
+      console.error("Error updating user status:", err);
+      showToast(err instanceof Error ? err.message : "Failed to update user status", "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleKillSwitch = async () => {
+    try {
+      setKillLoading(true);
+      const response = await fetch("/api/users/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetRole: killTarget,
+          reason: killReason,
+          bannerMessage: killBanner || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Kill-switch failed");
+      }
+
+      setKillSwitchOpen(false);
+      await fetchUsers(false);
+      showToast(`Kill-switch executed for ${killTarget === "ALL" ? "all users" : "Standard Users"}`, "warning");
+    } catch (err) {
+      console.error("Error triggering kill-switch:", err);
+      showToast(err instanceof Error ? err.message : "Kill-switch failed", "error");
+    } finally {
+      setKillLoading(false);
+    }
   };
 
   const confirmResetPassword = async () => {
@@ -272,6 +366,16 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          {session.user.role === "SUPER_ADMIN" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setKillSwitchOpen(true)}
+            >
+              <Ban className="h-4 w-4 mr-2" />
+              Kill Switch
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -340,7 +444,7 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
             currentUserId={session.user.id}
             onEdit={handleEditUser}
             onDelete={handleDeleteUser}
-            onToggleActive={handleToggleActive}
+            onStatusAction={handleStatusAction}
             onResetPassword={handleResetPassword}
             onRefresh={handleRefresh}
           />
@@ -412,6 +516,185 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
           ]}
         />
       )}
+
+      {/* Status / Suspension Dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent className="border-2 border-amber-200 dark:border-amber-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-amber-500" />
+              {statusAction === "activate"
+                ? "Reactivate User"
+                : statusAction === "suspend"
+                  ? "Suspend User"
+                  : statusAction === "banner"
+                    ? "Send Banner Message"
+                    : "Deactivate User"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUser
+                ? `${selectedUser.firstName} ${selectedUser.lastName} (${selectedUser.email})`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="font-semibold">Action</Label>
+                <Select
+                  value={statusAction}
+                  onValueChange={(v) => setStatusAction(v as any)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select action" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="deactivate">Deactivate (hard off)</SelectItem>
+                    <SelectItem value="suspend">Suspend with timer</SelectItem>
+                    <SelectItem value="activate">Reactivate</SelectItem>
+                    <SelectItem value="banner">Send banner only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold flex items-center gap-2">
+                  <Clock4 className="h-4 w-4" />
+                  Auto-reactivate (minutes)
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={suspendMinutes}
+                  onChange={(e) => setSuspendMinutes(Number(e.target.value))}
+                  disabled={statusAction !== "suspend"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set to 0 for an indefinite suspension.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-semibold">Reason</Label>
+              <Textarea
+                placeholder="Why is this user being deactivated or suspended?"
+                value={statusReason}
+                onChange={(e) => setStatusReason(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-semibold flex items-center gap-2">
+                <Megaphone className="h-4 w-4" />
+                Banner message (optional)
+              </Label>
+              <Textarea
+                placeholder="Warn the user before/while suspending. Example: “Please save your work; your session will end in 2 minutes.”"
+                value={statusBanner}
+                onChange={(e) => setStatusBanner(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Delivered immediately as a top-of-screen banner. Clears automatically after a few minutes or when emptied.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setStatusDialogOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={submitStatusUpdate} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                "Apply"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mass Kill-Switch Dialog */}
+      <Dialog open={killSwitchOpen} onOpenChange={setKillSwitchOpen}>
+        <DialogContent className="border-2 border-red-200 dark:border-red-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-500" />
+              Kill-Switch / Mass Suspension
+            </DialogTitle>
+            <DialogDescription>
+              Immediately deactivate a cohort of users and invalidate all sessions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="font-semibold">Target audience</Label>
+              <Select
+                value={killTarget}
+                onValueChange={(v) => setKillTarget(v as any)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select target" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STANDARD_USER">All Standard Users</SelectItem>
+                  <SelectItem value="ALL">Everyone (all roles)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-semibold">Reason</Label>
+              <Textarea
+                value={killReason}
+                onChange={(e) => setKillReason(e.target.value)}
+                placeholder="Reason for mass suspension"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="font-semibold flex items-center gap-2">
+                <Megaphone className="h-4 w-4" />
+                Banner message (optional)
+              </Label>
+              <Textarea
+                value={killBanner}
+                onChange={(e) => setKillBanner(e.target.value)}
+                placeholder="Optional broadcast shown before logout"
+              />
+            </div>
+
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-200">
+              This immediately sets accounts to inactive, bumps session versions, and forces logout across all devices.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setKillSwitchOpen(false)} disabled={killLoading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleKillSwitch} disabled={killLoading}>
+              {killLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Triggering...
+                </>
+              ) : (
+                "Trigger Kill-Switch"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reset Password Dialog */}
       <Dialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen}>

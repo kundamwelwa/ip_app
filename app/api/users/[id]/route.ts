@@ -26,6 +26,12 @@ export async function GET(
         department: true,
         role: true,
         isActive: true,
+        deactivationReason: true,
+        deactivatedAt: true,
+        deactivatedBy: true,
+        suspendedUntil: true,
+        bannerMessage: true,
+        bannerExpiresAt: true,
         createdAt: true,
         updatedAt: true,
         // Removed _count temporarily until all tables exist
@@ -41,6 +47,9 @@ export async function GET(
         ...user,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
+        deactivatedAt: user.deactivatedAt ? user.deactivatedAt.toISOString() : null,
+        suspendedUntil: user.suspendedUntil ? user.suspendedUntil.toISOString() : null,
+        bannerExpiresAt: user.bannerExpiresAt ? user.bannerExpiresAt.toISOString() : null,
       },
     });
   } catch (error) {
@@ -72,7 +81,28 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { firstName, lastName, email, department, role, isActive } = body;
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      department, 
+      role, 
+      isActive,
+      deactivationReason,
+      suspendedUntil,
+      bannerMessage,
+      bannerExpiresAt,
+      action,
+    } = body;
+
+    // Only Super Admins can change active status or suspend/kill accounts
+    const isStatusAction = ["deactivate", "suspend", "activate"].includes(action) || isActive !== undefined;
+    if (isStatusAction && session.user.role !== "SUPER_ADMIN") {
+      return NextResponse.json(
+        { error: "Only Super Admins can activate/deactivate accounts" },
+        { status: 403 }
+      );
+    }
 
     // Build update data
     const updateData: any = {};
@@ -82,7 +112,44 @@ export async function PATCH(
     if (email !== undefined) updateData.email = email.toLowerCase().trim();
     if (department !== undefined) updateData.department = department;
     if (role !== undefined) updateData.role = role;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    if (isActive !== undefined) {
+      updateData.isActive = isActive;
+      updateData.sessionVersion = { increment: 1 };
+      if (isActive) {
+        updateData.deactivationReason = null;
+        updateData.deactivatedAt = null;
+        updateData.deactivatedBy = null;
+        updateData.suspendedUntil = null;
+      }
+    }
+
+    if (["deactivate", "suspend"].includes(action)) {
+      updateData.isActive = false;
+      updateData.deactivationReason =
+        deactivationReason || (action === "suspend" ? "Suspended by administrator" : "Deactivated by administrator");
+      updateData.deactivatedAt = new Date();
+      updateData.deactivatedBy = session.user.id;
+      updateData.suspendedUntil = suspendedUntil ? new Date(suspendedUntil) : null;
+      updateData.sessionVersion = { increment: 1 };
+    }
+
+    if (action === "activate") {
+      updateData.isActive = true;
+      updateData.deactivationReason = null;
+      updateData.deactivatedAt = null;
+      updateData.deactivatedBy = null;
+      updateData.suspendedUntil = null;
+      updateData.sessionVersion = { increment: 1 };
+    }
+
+    if (bannerMessage !== undefined) {
+      updateData.bannerMessage = bannerMessage;
+      updateData.bannerExpiresAt = bannerMessage
+        ? bannerExpiresAt
+          ? new Date(bannerExpiresAt)
+          : new Date(Date.now() + 5 * 60 * 1000) // default 5 min visibility
+        : null;
+    }
 
     // Update user
     const user = await prisma.user.update({
@@ -96,22 +163,34 @@ export async function PATCH(
         department: true,
         role: true,
         isActive: true,
+        deactivationReason: true,
+        deactivatedAt: true,
+        deactivatedBy: true,
+        suspendedUntil: true,
+        bannerMessage: true,
+        bannerExpiresAt: true,
         createdAt: true,
         updatedAt: true,
       },
     });
 
     try {
+      const auditAction = action
+        ? `USER_${action.toUpperCase()}`
+        : "UPDATED_USER";
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
-          action: "UPDATED_USER",
+          action: auditAction,
           entityType: "user",
           entityId: user.id,
           details: {
             email: user.email,
             updatedFields: Object.keys(updateData),
             updatedBy: session.user.email,
+            reason: deactivationReason,
+            suspendedUntil,
+            bannerMessage,
           },
         },
       });
@@ -124,6 +203,9 @@ export async function PATCH(
         ...user,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
+        deactivatedAt: user.deactivatedAt ? user.deactivatedAt.toISOString() : null,
+        suspendedUntil: user.suspendedUntil ? user.suspendedUntil.toISOString() : null,
+        bannerExpiresAt: user.bannerExpiresAt ? user.bannerExpiresAt.toISOString() : null,
       },
     });
   } catch (error) {

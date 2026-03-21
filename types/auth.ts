@@ -6,12 +6,14 @@ declare module "next-auth" {
       id: string
       role: string
       department: string
+      sessionVersion?: number
     } & DefaultSession["user"]
   }
 
   interface User {
     role: string
     department: string
+    sessionVersion?: number
   }
 }
 
@@ -19,6 +21,8 @@ declare module "next-auth/jwt" {
   interface JWT {
     role: string
     department: string
+    sessionVersion?: number
+    permissions?: string[]
   }
 }
 
@@ -45,6 +49,11 @@ export interface User {
   email: string;
   department: string;
   role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "STANDARD_USER";
+  isActive: boolean;
+  deactivationReason?: string | null;
+  suspendedUntil?: Date | null;
+  bannerMessage?: string | null;
+  bannerExpiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
