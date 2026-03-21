@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       isSuperAdminBootstrap = true;
     }
 
-    const assignedRole = isSuperAdminBootstrap ? "SUPER_ADMIN" : "USER";
+    const assignedRole = isSuperAdminBootstrap ? "SUPER_ADMIN" : "STANDARD_USER";
     const isActiveStatus = isSuperAdminBootstrap ? true : false;
     const permissionsArr = isSuperAdminBootstrap ? ["*"] : [];
 

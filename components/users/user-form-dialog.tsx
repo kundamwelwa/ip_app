@@ -56,7 +56,7 @@ export function UserFormDialog({
     lastName: "",
     email: "",
     department: "",
-    role: "TECHNICIAN" as "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER",
+    role: "TECHNICIAN" as "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "STANDARD_USER",
     password: "",
     confirmPassword: "",
     isActive: true,
@@ -329,7 +329,7 @@ export function UserFormDialog({
                     <SelectItem value="ADMIN">Administrator</SelectItem>
                     <SelectItem value="MANAGER">Manager</SelectItem>
                     <SelectItem value="TECHNICIAN">Technician</SelectItem>
-                    <SelectItem value="USER">Standard User</SelectItem>
+                    <SelectItem value="STANDARD_USER">Standard User</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -337,7 +337,7 @@ export function UserFormDialog({
                   {formData.role === "ADMIN" && "Full system access"}
                   {formData.role === "MANAGER" && "Management and reporting access"}
                   {formData.role === "TECHNICIAN" && "Operational access only"}
-                  {formData.role === "USER" && "Standard restricted access"}
+                  {formData.role === "STANDARD_USER" && "Standard restricted access"}
                 </p>
               </div>
             </div>

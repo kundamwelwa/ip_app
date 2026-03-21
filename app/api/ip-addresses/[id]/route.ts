@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkPermission } from "@/lib/rbac";
 
 // GET /api/ip-addresses/[id] - Get a specific IP address
 export async function GET(
@@ -13,6 +14,9 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("ip:read");
+    if (guard) return guard;
 
     const { id } = await params;
 
@@ -69,6 +73,9 @@ export async function PATCH(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("ip:write");
+    if (guard) return guard;
 
     const { id } = await params;
     const body = await request.json();
@@ -141,6 +148,9 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("ip:write");
+    if (guard) return guard;
 
     const { id } = await params;
 

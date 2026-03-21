@@ -106,14 +106,14 @@ export function UserList({
           Technician
         </Badge>
       ),
-      USER: (
+      STANDARD_USER: (
         <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400">
           <Users className="h-3 w-3 mr-1" />
           Std User
         </Badge>
       ),
     };
-    return badges[role as keyof typeof badges] || badges.USER;
+    return badges[role as keyof typeof badges] || badges.STANDARD_USER;
   };
 
   const getStatusBadge = (isActive: boolean) => {
@@ -161,7 +161,7 @@ export function UserList({
             <SelectItem value="ADMIN">Admin</SelectItem>
             <SelectItem value="MANAGER">Manager</SelectItem>
             <SelectItem value="TECHNICIAN">Technician</SelectItem>
-            <SelectItem value="USER">Std User</SelectItem>
+            <SelectItem value="STANDARD_USER">Std User</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>

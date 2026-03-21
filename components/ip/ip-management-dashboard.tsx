@@ -78,6 +78,7 @@ import { BulkConfirmationDialog, BulkConfirmationItem } from "@/components/ui/bu
 import { exportSelectedIPs } from "@/lib/export-utils";
 import { AdvancedFilters, ActiveFilter } from "@/components/ui/advanced-filters";
 import type { IPCategory } from "@/lib/ip-categories";
+import { useSession } from "next-auth/react";
 
 // Types
 interface IPAddress extends IPAddressItem {
@@ -205,6 +206,9 @@ interface ApiAuditLog {
 }
 
 export function IPManagementDashboard() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role || "STANDARD_USER";
+  const canModify = userRole !== "STANDARD_USER";
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -908,18 +912,22 @@ export function IPManagementDashboard() {
             <Download className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsEnhancedImportDialogOpen(true)}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Import</span>
-          </Button>
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add IP Address
-          </Button>
+          {canModify && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEnhancedImportDialogOpen(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Import</span>
+            </Button>
+          )}
+          {canModify && (
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add IP Address
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1153,17 +1161,19 @@ export function IPManagementDashboard() {
                   Manage all IP addresses in the network
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDeleteAllSystem}
-                  disabled={ipAddresses.length === 0}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete All IPs
-                </Button>
-              </div>
+              {canModify && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteAllSystem}
+                    disabled={ipAddresses.length === 0}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete All IPs
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -1173,8 +1183,8 @@ export function IPManagementDashboard() {
               ) : (
                 <CategorizedIPList
                   ipAddresses={filteredIPs}
-                  onEdit={handleEditIP}
-                  onDeleteCategory={(category, ips) => handleDeleteCategory(category, ips)}
+                  onEdit={canModify ? handleEditIP : undefined}
+                  onDeleteCategory={canModify ? (category, ips) => handleDeleteCategory(category, ips) : undefined}
                   selectedIds={selectedIPIds}
                   onSelect={handleSelectIP}
                   onSelectAll={handleSelectAll}
@@ -1247,14 +1257,18 @@ export function IPManagementDashboard() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline">
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button size="sm" variant="outline">
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                        {canModify ? (
+                          <div className="flex items-center space-x-2">
+                            <Button size="sm" variant="outline">
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">View only</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

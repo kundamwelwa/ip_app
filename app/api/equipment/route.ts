@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkEquipmentStatus } from "@/lib/equipment-communication";
 import * as alertService from "@/lib/alert-service";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +12,9 @@ export async function GET(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:read");
+    if (guard) return guard;
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
@@ -79,6 +83,9 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:write");
+    if (guard) return guard;
 
     const body = await request.json();
     const {
@@ -319,6 +326,9 @@ export async function PUT(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:write");
+    if (guard) return guard;
 
     const body = await request.json();
     const { action, equipmentId } = body;

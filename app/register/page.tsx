@@ -35,7 +35,7 @@ function RegisterForm() {
     password: "",
     confirmPassword: "",
     department: "",
-    role: "USER",
+    role: "STANDARD_USER",
     setupToken: "",
   });
 
@@ -122,7 +122,7 @@ function RegisterForm() {
     }
   };
 
-  const handleRoleChange = (value: "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER") => {
+  const handleRoleChange = (value: "ADMIN" | "MANAGER" | "TECHNICIAN" | "STANDARD_USER") => {
     setFormData({
       ...formData,
       role: value,
@@ -279,7 +279,7 @@ function RegisterForm() {
                           Network Technician
                         </div>
                       </SelectItem>
-                      <SelectItem value="USER" className="text-white hover:bg-amber-500/10">
+                      <SelectItem value="STANDARD_USER" className="text-white hover:bg-amber-500/10">
                         <div className="flex items-center gap-2">
                           <User className="w-4 h-4 text-amber-500" />
                           Standard User

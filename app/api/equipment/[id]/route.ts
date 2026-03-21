@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkPermission } from "@/lib/rbac";
 
 export async function GET(
   request: NextRequest,
@@ -12,6 +13,9 @@ export async function GET(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:read");
+    if (guard) return guard;
 
     // Await params (Next.js 15 requirement)
     const { id } = await params;
@@ -75,6 +79,9 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:write");
+    if (guard) return guard;
 
     // Await params (Next.js 15 requirement)
     const { id } = await params;
@@ -187,6 +194,9 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("equipment:write");
+    if (guard) return guard;
 
     // Await params (Next.js 15 requirement)
     const { id } = await params;

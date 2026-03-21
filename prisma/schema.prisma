@@ -18,7 +18,7 @@ model User {
   firstName      String
   lastName       String
   department     String
-  role           UserRole @default(USER)
+  role           UserRole @default(STANDARD_USER)
   password       String
   phoneNumber    String?
   profilePicture String?
@@ -48,7 +48,7 @@ enum UserRole {
   ADMIN
   MANAGER
   TECHNICIAN
-  USER
+  STANDARD_USER
 }
 
 // IP Address Management
@@ -170,6 +170,22 @@ model AuditLog {
   equipment Equipment? @relation(fields: [equipmentId], references: [id])
 
   @@map("audit_logs")
+}
+
+// Security Auditing
+model SecurityAudit {
+  id          String   @id @default(cuid())
+  userId      String?  // Optional since unauthorized attempts might be unauthenticated
+  userEmail   String?
+  role        String?
+  action      String   // e.g., "UNAUTHORIZED_ACCESS", "API_BYPASS_ATTEMPT"
+  resource    String   // e.g., "GET /api/equipment", "equipment:write"
+  ipAddress   String?  // The source IP of the request
+  userAgent   String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@map("security_audits")
 }
 
 // Network Configuration

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import * as alertService from "@/lib/alert-service";
+import { checkPermission } from "@/lib/rbac";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +11,9 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("ip:write");
+    if (guard) return guard;
 
     const body = await request.json();
     const { ipAddress, equipmentId, notes } = body;
@@ -282,6 +286,9 @@ export async function DELETE(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const guard = await checkPermission("ip:write");
+    if (guard) return guard;
 
     const { searchParams } = new URL(request.url);
     const ipAddress = searchParams.get("ip");

@@ -83,10 +83,15 @@ import { BulkActionToolbar, BulkSelectCheckbox } from "@/components/ui/bulk-acti
 import { BulkConfirmationDialog, BulkConfirmationItem } from "@/components/ui/bulk-confirmation-dialog";
 import { exportSelectedEquipment } from "@/lib/export-utils";
 import { AdvancedFilters, ActiveFilter } from "@/components/ui/advanced-filters";
+import { useSession } from "next-auth/react";
 
 // Equipment types and form data are now imported from types/equipment.ts
 
 export function MiningEquipmentDashboard() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role || "STANDARD_USER";
+  const canModify = userRole !== "STANDARD_USER";
+
   const [equipment, setEquipment] = useState<MiningEquipment[]>([]);
   const [totalEquipmentCount, setTotalEquipmentCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -703,13 +708,14 @@ export function MiningEquipmentDashboard() {
             )}
           </div>
 
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Add Equipment</span>
-              </Button>
-            </DialogTrigger>
+          {canModify && (
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Equipment</span>
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto dialog-scroll">
               <DialogHeader>
                 <DialogTitle>Add New Equipment</DialogTitle>
@@ -966,6 +972,7 @@ export function MiningEquipmentDashboard() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -1413,28 +1420,32 @@ export function MiningEquipmentDashboard() {
                             className="h-8 w-8 p-0"
                             title="Refresh Status"
                           >
-                            <RefreshCw className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditEquipment(item)}
-                            className="h-8 w-8 p-0"
-                            title="Edit Equipment"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteClick(item)}
-                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                            title="Delete Equipment"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                              <RefreshCw className="h-3 w-3" />
+                            </Button>
+                            {canModify && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditEquipment(item)}
+                                  className="h-8 w-8 p-0"
+                                  title="Edit Equipment"
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteClick(item)}
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                                  title="Delete Equipment"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
                     </TableRow>
                   );
                 })}

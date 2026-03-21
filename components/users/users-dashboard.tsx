@@ -39,7 +39,7 @@ export interface User {
   firstName: string;
   lastName: string;
   department: string;
-  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "USER";
+  role: "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "TECHNICIAN" | "STANDARD_USER";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -236,7 +236,7 @@ export function UsersDashboard({ session }: UsersDashboardProps) {
     admins: users.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN").length,
     managers: users.filter((u) => u.role === "MANAGER").length,
     technicians: users.filter((u) => u.role === "TECHNICIAN").length,
-    users: users.filter((u) => u.role === "USER").length,
+    users: users.filter((u) => u.role === "STANDARD_USER").length,
   };
 
   if (loading) {
