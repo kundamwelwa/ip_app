@@ -14,6 +14,7 @@ import { LoginFormData } from "@/types/auth";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
+import { AdminBanner } from "@/components/ui/admin-banner";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,14 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const message = searchParams.get("message");
+  const reasonParam = searchParams.get("reason");
+  const detailParam = searchParams.get("detail");
+  const titleParam = searchParams.get("title");
+  const [adminNotice, setAdminNotice] = useState<{
+    title: string;
+    message: string;
+    reason?: string;
+  } | null>(null);
 
   const openModal = useCallback(
     (
@@ -61,6 +70,16 @@ function LoginForm() {
       openModal("success", "Success", message);
     }
   }, [message, openModal]);
+
+  useEffect(() => {
+    if (reasonParam) {
+      setAdminNotice({
+        title: titleParam || "Sign-in failed",
+        message: detailParam || "Your account has a restriction applied by an administrator.",
+        reason: reasonParam,
+      });
+    }
+  }, [reasonParam, detailParam, titleParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,7 +99,11 @@ function LoginForm() {
         const errorMessage = result.error === "CredentialsSignin" 
           ? "Invalid email, password, or your account resides in a pending/unauthorized state."
           : result.error;
-        openModal("error", "Sign-in failed", errorMessage);
+        setAdminNotice({
+          title: "Sign-in failed",
+          message: errorMessage,
+          reason: errorMessage,
+        });
       } else {
         router.push("/dashboard");
       }
@@ -117,6 +140,18 @@ function LoginForm() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
+          {adminNotice && (
+            <div className="mb-4">
+              <AdminBanner
+                title={adminNotice.title}
+                message={adminNotice.message}
+                reason={adminNotice.reason}
+                ctaLabel="Got it"
+                onCta={() => setAdminNotice(null)}
+                onDismiss={() => setAdminNotice(null)}
+              />
+            </div>
+          )}
           <Card className="border-amber-500/20 bg-gradient-to-br from-slate-900/95 via-zinc-900/95 to-slate-900/95 backdrop-blur-xl shadow-2xl">
             <CardHeader className="space-y-1 text-center">
               <motion.div

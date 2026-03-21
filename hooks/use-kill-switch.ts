@@ -15,6 +15,12 @@ type KillSwitchState = {
   deactivatedAt?: string | null;
 };
 
+type AccountNotice = {
+  title: string;
+  message: string;
+  reason?: string;
+};
+
 export function useKillSwitch() {
   const { data: session, status } = useSession();
   const [banner, setBanner] = useState<BannerState | null>(null);
@@ -23,8 +29,11 @@ export function useKillSwitch() {
     reason: undefined,
     deactivatedAt: undefined,
   });
-  const [accountNotice, setAccountNotice] = useState<string | null>(null);
+  const [accountNotice, setAccountNotice] = useState<AccountNotice | null>(null);
   const [lastSessionVersion, setLastSessionVersion] = useState<number | null>(
+    (session?.user as any)?.sessionVersion ?? null
+  );
+  const [notifiedVersion, setNotifiedVersion] = useState<number | null>(
     (session?.user as any)?.sessionVersion ?? null
   );
 
@@ -64,10 +73,16 @@ export function useKillSwitch() {
     const incomingVersion = typeof record.sessionVersion === "number" ? record.sessionVersion : null;
     if (
       incomingVersion !== null &&
-      (lastSessionVersion === null || incomingVersion > lastSessionVersion)
+      (lastSessionVersion === null || incomingVersion > lastSessionVersion) &&
+      (notifiedVersion === null || incomingVersion > notifiedVersion)
     ) {
       setLastSessionVersion(incomingVersion);
-      setAccountNotice("Your account settings were updated by an administrator. Some permissions may have changed.");
+      setNotifiedVersion(incomingVersion);
+      setAccountNotice({
+        title: "Account Updated",
+        message: "Your account settings were updated by an administrator. Some permissions may have changed.",
+        reason: record.deactivationReason || record.bannerMessage || undefined,
+      });
     }
   };
 
@@ -143,6 +158,7 @@ export function useKillSwitch() {
   useEffect(() => {
     if (session?.user && typeof (session.user as any).sessionVersion === "number") {
       setLastSessionVersion((session.user as any).sessionVersion);
+      setNotifiedVersion((session.user as any).sessionVersion);
     }
   }, [session]);
 
