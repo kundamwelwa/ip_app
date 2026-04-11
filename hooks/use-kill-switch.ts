@@ -78,11 +78,7 @@ export function useKillSwitch() {
     ) {
       setLastSessionVersion(incomingVersion);
       setNotifiedVersion(incomingVersion);
-      setAccountNotice({
-        title: "Account Updated",
-        message: "Your account settings were updated by an administrator. Some permissions may have changed.",
-        reason: record.deactivationReason || record.bannerMessage || undefined,
-      });
+
     }
   };
 
