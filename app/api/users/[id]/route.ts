@@ -34,7 +34,6 @@ export async function GET(
         bannerExpiresAt: true,
         createdAt: true,
         updatedAt: true,
-        // Removed _count temporarily until all tables exist
       },
     });
 
@@ -72,7 +71,6 @@ export async function PATCH(
     const { id } = await params;
 
     // Prevent user from modifying their own account through this endpoint
-    // (for safety, they should use a profile update endpoint)
     if (id === session.user.id) {
       return NextResponse.json(
         { error: "Cannot modify your own account through this endpoint" },
@@ -151,7 +149,6 @@ export async function PATCH(
         : null;
     }
 
-    // Any admin action should bump session version to invalidate live sessions and trigger realtime notice
     if (!updateData.sessionVersion) {
       updateData.sessionVersion = { increment: 1 };
     }
@@ -250,7 +247,7 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Create audit log before deletion (non-blocking)
+    // Create audit log before deletion (non-blocking) - Use admin ID as userId
     try {
       await prisma.auditLog.create({
         data: {
@@ -269,9 +266,17 @@ export async function DELETE(
       console.error("Failed to create audit log:", auditError);
     }
 
-    await prisma.user.delete({
-      where: { id },
-    });
+    // Wrap the deletion in a transaction to satisfy relational foreign key constraints
+    await prisma.$transaction([
+      prisma.auditLog.deleteMany({ where: { userId: id } }),
+      prisma.iPAssignment.deleteMany({ where: { userId: id } }),
+      prisma.report.deleteMany({ where: { userId: id } }),
+      prisma.alert.updateMany({ where: { acknowledgedBy: id }, data: { acknowledgedBy: null } }),
+      prisma.alert.updateMany({ where: { approvedBy: id }, data: { approvedBy: null } }),
+      prisma.alert.updateMany({ where: { rejectedBy: id }, data: { rejectedBy: null } }),
+      prisma.alert.updateMany({ where: { resolvedBy: id }, data: { resolvedBy: null } }),
+      prisma.user.delete({ where: { id } }),
+    ]);
 
     return NextResponse.json({ message: "User deleted successfully" });
   } catch (error) {
@@ -285,4 +290,3 @@ export async function DELETE(
     );
   }
 }
-
