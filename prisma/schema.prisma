@@ -151,7 +151,7 @@ model IPAssignment {
   // Relations
   ipAddress IPAddress @relation(fields: [ipAddressId], references: [id])
   equipment Equipment? @relation(fields: [equipmentId], references: [id])
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("ip_assignments")
 }
@@ -169,7 +169,7 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   // Relations
-  user      User       @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress IPAddress? @relation(fields: [ipAddressId], references: [id])
   equipment Equipment? @relation(fields: [equipmentId], references: [id])
 
@@ -258,10 +258,10 @@ model Alert {
   // Relations
   equipment    Equipment? @relation(fields: [equipmentId], references: [id])
   ipAddress    IPAddress? @relation(fields: [ipAddressId], references: [id])
-  acknowledger User?      @relation("AlertAcknowledger", fields: [acknowledgedBy], references: [id])
-  approver     User?      @relation("AlertApprover", fields: [approvedBy], references: [id])
-  rejecter     User?      @relation("AlertRejecter", fields: [rejectedBy], references: [id])
-  resolver     User?      @relation("AlertResolver", fields: [resolvedBy], references: [id])
+  acknowledger User?      @relation("AlertAcknowledger", fields: [acknowledgedBy], references: [id], onDelete: SetNull)
+  approver     User?      @relation("AlertApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  rejecter     User?      @relation("AlertRejecter", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  resolver     User?      @relation("AlertResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
 
   @@map("alerts")
 }
