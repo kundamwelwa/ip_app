@@ -271,7 +271,7 @@ export async function parseExcelToEquipment(file: File): Promise<EquipmentImport
                 else if (descLower.startsWith('ld')) type = 'LOADER';
                 else if (descLower.startsWith('sh')) type = 'SHOVEL';
                 else if (descLower.includes('crusher')) type = 'CRUSHER';
-                else if (descLower.includes('conveyor')) type = 'CONVEYOR';
+                else if (descLower.includes('other')) type = 'OTHER';
 
                 equipmentData.push({
                   name: description,
@@ -462,7 +462,7 @@ export function convertImportDataToEquipment(data: EquipmentImportData): Omit<Mi
  * Validates equipment type
  */
 export function isValidEquipmentType(type: string): boolean {
-  const validTypes = ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Conveyor"];
+  const validTypes = ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"];
   return validTypes.includes(type);
 }
 
@@ -470,12 +470,12 @@ export function isValidEquipmentType(type: string): boolean {
  * Gets equipment type options
  */
 export function getEquipmentTypeOptions(): string[] {
-  return ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Conveyor"];
+  return ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"];
 }
 
 /**
  * Gets manufacturer options
  */
 export function getManufacturerOptions(): string[] {
-  return ["Caterpillar", "Komatsu", "Liebherr", "Hitachi", "Volvo", "John Deere", "Case", "JCB"];
+  return ["Komatsu", "Liebherr", "Caterpillar", "Epiroc"];
 }

@@ -172,12 +172,12 @@ export function MiningEquipmentDashboard() {
 
   // Equipment types for dropdown
   const equipmentTypes = [
-    "Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Conveyor"
+    "Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"
   ];
 
   // Manufacturers for dropdown
   const manufacturers = [
-    "Caterpillar", "Komatsu", "Liebherr", "Hitachi", "Volvo", "John Deere", "Case", "JCB"
+    "Komatsu", "Liebherr", "Caterpillar", "Epiroc"
   ];
 
   // Fetch real equipment data from API
@@ -1153,8 +1153,8 @@ export function MiningEquipmentDashboard() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="online">Online</SelectItem>
-                    <SelectItem value="offline">Offline</SelectItem>
+                    <SelectItem value="Crusher">Crusher</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                     <SelectItem value="maintenance">Maintenance</SelectItem>
                     <SelectItem value="idle">Idle</SelectItem>
                   </SelectContent>

@@ -66,7 +66,7 @@ import {
 interface EquipmentStatus {
   id: string;
   name: string;
-  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor";
+  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Other";
   model: string;
   manufacturer: string;
   serialNumber: string;
@@ -740,7 +740,7 @@ export function EquipmentStatusDashboard() {
                 <SelectItem value="Dozer">Dozer</SelectItem>
                 <SelectItem value="Shovel">Shovel</SelectItem>
                 <SelectItem value="Crusher">Crusher</SelectItem>
-                <SelectItem value="Conveyor">Conveyor</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>

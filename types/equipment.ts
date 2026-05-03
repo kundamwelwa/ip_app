@@ -5,7 +5,7 @@
 export interface MiningEquipment {
   id: string;
   name: string;
-  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Conveyor";
+  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Other";
   model: string | null;
   manufacturer: string | null;
   serialNumber: string | null;
