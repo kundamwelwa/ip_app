@@ -61,7 +61,7 @@ import {
 interface Equipment {
   id: string;
   name: string;
-  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Other";
+  type: "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Rajant Node" | "Other";
   model: string;
   manufacturer: string;
   serialNumber: string;
@@ -482,7 +482,7 @@ export function IPAssignmentDashboard() {
       id: `REQ${String(assignmentRequests.length + 1).padStart(3, '0')}`,
       equipmentId: formData.equipmentId,
       equipmentName: formData.equipmentName,
-      equipmentType: formData.equipmentType as "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Other",
+      equipmentType: formData.equipmentType as "Truck" | "Excavator" | "Drill" | "Loader" | "Dozer" | "Shovel" | "Crusher" | "Rajant Node" | "Other",
       location: formData.location,
       requestedBy: "Current User",
       requestedAt: new Date(),
@@ -1036,6 +1036,7 @@ export function IPAssignmentDashboard() {
                     <SelectItem value="Dozer">Dozer</SelectItem>
                     <SelectItem value="Shovel">Shovel</SelectItem>
                     <SelectItem value="Crusher">Crusher</SelectItem>
+                    <SelectItem value="Rajant Node">Rajant Node</SelectItem>
                     <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>

@@ -262,16 +262,16 @@ export async function parseExcelToEquipment(file: File): Promise<EquipmentImport
                 }
 
                 // Infer type from description
-                let type = 'OTHER';
-                if (descLower.includes('rajant')) type = 'RAJANT_NODE';
-                else if (descLower.startsWith('fd')) type = 'DRILL';
-                else if (descLower.startsWith('ex')) type = 'EXCAVATOR';
-                else if (descLower.startsWith('tr')) type = 'TRUCK';
-                else if (descLower.startsWith('dz')) type = 'DOZER';
-                else if (descLower.startsWith('ld')) type = 'LOADER';
-                else if (descLower.startsWith('sh')) type = 'SHOVEL';
-                else if (descLower.includes('crusher')) type = 'CRUSHER';
-                else if (descLower.includes('other')) type = 'OTHER';
+                let type: MiningEquipment['type'] = 'Other';
+                if (descLower.includes('rajant')) type = 'Rajant Node';
+                else if (descLower.startsWith('fd')) type = 'Drill';
+                else if (descLower.startsWith('ex')) type = 'Excavator';
+                else if (descLower.startsWith('tr')) type = 'Truck';
+                else if (descLower.startsWith('dz')) type = 'Dozer';
+                else if (descLower.startsWith('ld')) type = 'Loader';
+                else if (descLower.startsWith('sh')) type = 'Shovel';
+                else if (descLower.includes('crusher')) type = 'Crusher';
+                else if (descLower.includes('other')) type = 'Other';
 
                 equipmentData.push({
                   name: description,
@@ -462,7 +462,7 @@ export function convertImportDataToEquipment(data: EquipmentImportData): Omit<Mi
  * Validates equipment type
  */
 export function isValidEquipmentType(type: string): boolean {
-  const validTypes = ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"];
+  const validTypes = ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Rajant Node", "Other"];
   return validTypes.includes(type);
 }
 
@@ -470,7 +470,7 @@ export function isValidEquipmentType(type: string): boolean {
  * Gets equipment type options
  */
 export function getEquipmentTypeOptions(): string[] {
-  return ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"];
+  return ["Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Rajant Node", "Other"];
 }
 
 /**

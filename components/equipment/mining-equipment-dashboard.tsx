@@ -172,7 +172,7 @@ export function MiningEquipmentDashboard() {
 
   // Equipment types for dropdown
   const equipmentTypes = [
-    "Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Other"
+    "Truck", "Excavator", "Drill", "Loader", "Dozer", "Shovel", "Crusher", "Rajant Node", "Other"
   ];
 
   // Manufacturers for dropdown
