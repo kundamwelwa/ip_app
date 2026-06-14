@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
         message: `IP address is already assigned to "${activeAssignment.equipment?.name}"${activeAssignment.equipment?.location ? ` at ${activeAssignment.equipment.location}` : ''}`,
         ip,
         type: "private",
+        notes: ipAddress.notes,
         assignment: {
           assignmentId: activeAssignment.id,
           assignedAt: activeAssignment.assignedAt,

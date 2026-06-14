@@ -226,7 +226,8 @@ export function IPChecker({
           gateway: data.gateway || "192.168.1.1",
           dns: data.dns || ["8.8.8.8", "8.8.4.4"],
           createdAt: new Date(data.assignment.assignedAt),
-          lastModified: new Date(data.assignment.assignedAt)
+          lastModified: new Date(data.assignment.assignedAt),
+          notes: data.notes
         });
       } else {
         setIpCheckResult({
@@ -593,126 +594,16 @@ export function IPChecker({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Equipment Information</Label>
-                    <div className="p-3 bg-background border rounded-md space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{ipCheckResult.equipment.name}</span>
-                        <div className="flex items-center space-x-2">
-                          {getStatusIcon(ipCheckResult.equipment.status)}
-                          {getStatusBadge(ipCheckResult.equipment.status)}
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <div><strong>ID:</strong> {ipCheckResult.equipment.id}</div>
-                        <div><strong>Type:</strong> {ipCheckResult.equipment.type}</div>
-                        <div><strong>Location:</strong> {ipCheckResult.equipment.location}</div>
-                        <div><strong>Operator:</strong> {ipCheckResult.equipment.operator}</div>
-                        {ipCheckResult.equipment.notes && (
-                          <div><strong>Notes:</strong> {ipCheckResult.equipment.notes}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Real-time Network Status</Label>
-                    <div className="p-3 bg-background border rounded-md space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Uptime</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`font-medium ${getUptimeColor(ipCheckResult.equipment.uptime)}`}>
-                            {ipCheckResult.equipment.uptime}%
-                          </span>
-                          {ipCheckResult.equipment.isOnline && (
-                            <Badge variant="outline" className="text-xs">
-                              Live
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Signal Strength</span>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-muted rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full ${
-                                ipCheckResult.equipment.signalStrength > 80 
-                                  ? 'bg-green-500' 
-                                  : ipCheckResult.equipment.signalStrength > 60 
-                                    ? 'bg-yellow-500' 
-                                    : ipCheckResult.equipment.signalStrength > 40
-                                      ? 'bg-orange-500'
-                                    : 'bg-red-500'
-                              }`}
-                              style={{ width: `${ipCheckResult.equipment.signalStrength}%` }}
-                            />
-                          </div>
-                          <span className={`text-sm font-medium ${getSignalStrengthColor(ipCheckResult.equipment.signalStrength)}`}>
-                            {ipCheckResult.equipment.signalStrength}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Mesh Strength</span>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-16 bg-muted rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full ${
-                                ipCheckResult.equipment.meshStrength > 80 
-                                  ? 'bg-blue-500' 
-                                  : ipCheckResult.equipment.meshStrength > 60 
-                                    ? 'bg-yellow-500' 
-                                    : 'bg-red-500'
-                              }`}
-                              style={{ width: `${ipCheckResult.equipment.meshStrength}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium">{ipCheckResult.equipment.meshStrength}%</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Response Time</span>
-                        <span className="text-sm font-medium">
-                          {ipCheckResult.equipment.responseTime ? `${ipCheckResult.equipment.responseTime}ms` : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Last Seen</span>
-                        <div className="text-right">
-                          <div className="text-sm font-medium">{ipCheckResult.equipment.lastSeenFormatted}</div>
-                          <div className={`text-xs ${ipCheckResult.equipment.isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                            {ipCheckResult.equipment.timeAgo}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Status</span>
-                        <div className="flex items-center space-x-2">
-                        <span className={`text-sm font-medium ${
-                            ipCheckResult.equipment.isOnline 
-                            ? 'text-green-600' 
-                            : 'text-red-600'
-                        }`}>
-                            {ipCheckResult.equipment.isOnline ? '🟢 Online' : '🔴 Offline'}
-                        </span>
-                          {ipCheckResult.equipment.isOnline && (
-                            <Badge variant="outline" className="text-xs">
-                              Real-time
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">IP Address Notes</Label>
+                  <div className="p-3 bg-background border rounded-md min-h-[80px] flex flex-col justify-center">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
+                      {ipCheckResult.notes || "No notes added for this IP address."}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => onViewDetails(ipCheckResult.ip)}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Details
-                  </Button>
                   <Button variant="outline" size="sm" onClick={() => onUnassign(ipCheckResult.ip)}>
                     <Unlink className="h-4 w-4 mr-2" />
                     Unassign
